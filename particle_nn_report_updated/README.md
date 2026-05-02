@@ -1,24 +1,26 @@
-# LaTeX projekt: particle_nn_report
+# LaTeX Project: XY-Invariant Particle NN Report
 
-Tento archiv obsahuje kompletní zdrojový LaTeX projekt k reportu o klasifikaci detekovaných částic ve řídkých energetických maticích.
+This folder contains the updated English technical report for the repository. The report treats the `xy_invariant_particle_report_project.zip` guidance as the primary design contract:
 
-## Obsah
+- candidate inputs are variable-size `(x, y, t, e)` point sets;
+- detector-plane azimuth `theta_xy` is computed and stored as metadata;
+- `theta_xy` is excluded from class embeddings and clustering distance;
+- the first recommended model is deterministic XY-invariant descriptors plus a compact PointNet/DeepSets baseline.
 
-- `particle_nn_report.tex` - hlavní LaTeX dokument
-- `particle_nn_report.bib` - BibTeX bibliografie
-- `particle_nn_report.bbl` - vygenerovaná bibliografie pro snazší reprodukci
-- `particle_nn_report.pdf` - hotové zkompilované PDF
-- `assets/` - obrázky použité v dokumentu
+## Contents
 
-## Doporučená kompilace
+- `particle_nn_report.tex` - main LaTeX document
+- `particle_nn_report.bib` - bibliography
+- `particle_nn_report.pdf` - compiled PDF
+- `assets/` - figures retained from the earlier data-orientation report
 
-### Varianta 1: latexmk
+## Build
 
 ```bash
 latexmk -pdf particle_nn_report.tex
 ```
 
-### Varianta 2: ručně
+or manually:
 
 ```bash
 pdflatex particle_nn_report.tex
@@ -26,9 +28,3 @@ bibtex particle_nn_report
 pdflatex particle_nn_report.tex
 pdflatex particle_nn_report.tex
 ```
-
-## Poznámky
-
-- Projekt používá běžné balíčky TeX Live: `babel`, `graphicx`, `booktabs`, `tabularx`, `longtable`, `tcolorbox`, `natbib`, `siunitx`, `hyperref` a další.
-- Dokument očekává relativní cestu `assets/` ve stejné složce jako `.tex` soubor.
-- Soubor `particle_nn_report.bbl` je přiložen i pro případ, že chceš PDF znovu přeložit bez spouštění BibTeXu.

@@ -1,1 +1,31 @@
 *.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Large local data and generated experiment artifacts
+local_data/
+checkpoints/
+runs/
+wandb/
+mlruns/
+
+# Raw archives are intentionally kept out of git.
+*.zip
+
+# Python packaging/build output
+.venv/
+build/
+dist/
+*.egg-info/
+
+# LaTeX generated intermediates
+*.aux
+*.blg
+*.fls
+*.fdb_latexmk
+*.log
+*.out
+*.synctex.gz
+*.toc

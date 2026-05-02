@@ -1,0 +1,40 @@
+[FileInfo]
+"Acq Serie Index" ("Acquisition serie index"):
+u32[1]
+0 
+
+"Acq time" ("Acquisition time [s]"):
+double[1]
+20.000000 
+
+"ChipboardID" ("Chipboard ID"):
+char[9]
+G07-W0050
+
+"HV" ("High voltage [V]"):
+double[1]
+80.000000 
+
+"Interface" ("Readout interface"):
+char[7]
+MiniPIX
+
+"Mpx type" ("Medipix type"):
+i32[1]
+4 
+
+"Pixet version" ("Pixet version"):
+char[5]
+1.8.0
+
+"Start time" ("Acquisition start time"):
+double[1]
+1707800061.967000 
+
+"Start time (string)" ("Acquisition start time (string)"):
+char[64]
+Tue Feb 13 05:54:21.967000 2024
+
+"Threshold" ("Threshold [keV]"):
+double[1]
+3.491320 

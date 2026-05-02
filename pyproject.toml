@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "particle-classification"
+version = "0.1.0"
+description = "XY-invariant Timepix particle-candidate classification testbed"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "PyYAML>=6.0",
+  "torch>=2.0",
+]
+
+[project.optional-dependencies]
+clustering = ["scikit-learn>=1.3", "hdbscan>=0.8"]
+parquet = ["pyarrow>=14"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+particle-extract-raw = "particle_classification.cli:extract_raw_main"
+particle-data-index = "particle_classification.cli:data_index_main"
+particle-build-candidates = "particle_classification.cli:build_candidates_main"
+particle-train-baseline = "particle_classification.cli:train_baseline_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,5 @@
+Index	Matrix Index	ToA	ToT	FToA	Overflow
+0	0	100	1	0	0
+1	1	110	3	1	0
+2	256	120	7	2	0
+3	511	130	11	3	0

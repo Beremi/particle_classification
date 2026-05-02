@@ -1,9 +1,108 @@
-\begin{thebibliography}{24}
+\begin{thebibliography}{16}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Qi et~al.(2017)Qi, Su, Mo, and Guibas]{qi2017pointnet}
+Charles~R. Qi, Hao Su, Kaichun Mo, and Leonidas~J. Guibas.
+\newblock Pointnet: Deep learning on point sets for 3d classification and
+  segmentation.
+\newblock In \emph{Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 652--660, 2017.
+
+\bibitem[Zaheer et~al.(2017)Zaheer, Kottur, Ravanbakhsh, Poczos, Salakhutdinov,
+  and Smola]{zaheer2017deepsets}
+Manzil Zaheer, Satwik Kottur, Siamak Ravanbakhsh, Barnabas Poczos, Ruslan
+  Salakhutdinov, and Alexander Smola.
+\newblock Deep sets.
+\newblock In \emph{Advances in Neural Information Processing Systems},
+  volume~30, 2017.
+
+\bibitem[Wang et~al.(2019)Wang, Sun, Liu, Sarma, Bronstein, and
+  Solomon]{wang2019dgcnn}
+Yue Wang, Yongbin Sun, Ziwei Liu, Sanjay~E. Sarma, Michael~M. Bronstein, and
+  Justin~M. Solomon.
+\newblock Dynamic graph cnn for learning on point clouds.
+\newblock \emph{ACM Transactions on Graphics}, 38\penalty0 (5):\penalty0
+  146:1--146:12, 2019.
+
+\bibitem[Zhao et~al.(2021)Zhao, Jiang, Jia, Torr, and
+  Koltun]{zhao2021pointtransformer}
+Hengshuang Zhao, Li~Jiang, Jiaya Jia, Philip H.~S. Torr, and Vladlen Koltun.
+\newblock Point transformer.
+\newblock In \emph{Proceedings of the IEEE/CVF International Conference on
+  Computer Vision}, pages 16259--16268, 2021.
+
+\bibitem[Robles et~al.(2025)Robles, Yankelevich, Wu, Bian, and
+  Baldi]{robles2025pointset}
+Edgar~E. Robles, Alejandro Yankelevich, Wenjie Wu, Jianming Bian, and Pierre
+  Baldi.
+\newblock Particle hit clustering and identification using point set
+  transformers in liquid argon time projection chambers.
+\newblock \emph{arXiv preprint arXiv:2504.08182}, 2025.
+\newblock \doi{10.48550/arXiv.2504.08182}.
+\newblock URL \url{https://arxiv.org/abs/2504.08182}.
+
+\bibitem[McInnes et~al.(2017)McInnes, Healy, and Astels]{mcinnes2017hdbscan}
+Leland McInnes, John Healy, and Steve Astels.
+\newblock Hdbscan: Hierarchical density based clustering.
+\newblock \emph{Journal of Open Source Software}, 2\penalty0 (11):\penalty0
+  205, 2017.
+\newblock \doi{10.21105/joss.00205}.
+
+\bibitem[Xie et~al.(2016)Xie, Girshick, and Farhadi]{xie2016dec}
+Junyuan Xie, Ross Girshick, and Ali Farhadi.
+\newblock Unsupervised deep embedding for clustering analysis.
+\newblock In \emph{Proceedings of the 33rd International Conference on Machine
+  Learning}, pages 478--487, 2016.
+
+\bibitem[Guo et~al.(2017)Guo, Gao, Liu, and Yin]{guo2017idec}
+Xifeng Guo, Long Gao, Xinwang Liu, and Jianping Yin.
+\newblock Improved deep embedded clustering with local structure preservation.
+\newblock In \emph{Proceedings of the Twenty-Sixth International Joint
+  Conference on Artificial Intelligence}, pages 1753--1759, 2017.
+
+\bibitem[Jiang et~al.(2017)Jiang, Zheng, Tan, Tang, and Zhou]{jiang2017vade}
+Zhuxi Jiang, Yin Zheng, Huachun Tan, Bangsheng Tang, and Hanning Zhou.
+\newblock Variational deep embedding: An unsupervised and generative approach
+  to clustering.
+\newblock In \emph{Proceedings of the Twenty-Sixth International Joint
+  Conference on Artificial Intelligence}, pages 1965--1972, 2017.
+
+\bibitem[Young et~al.(2025)Young, Jwa, and Terao]{young2025polarmae}
+Sam Young, Yeon-jae Jwa, and Kazuhiro Terao.
+\newblock Particle trajectory representation learning with masked point
+  modeling.
+\newblock \emph{arXiv preprint arXiv:2502.02558}, 2025.
+\newblock \doi{10.48550/arXiv.2502.02558}.
+\newblock URL \url{https://arxiv.org/abs/2502.02558}.
+
+\bibitem[Qasim et~al.(2019)Qasim, Kieseler, Iiyama, and
+  Pierini]{qasim2019gravnet}
+Shah~Rukh Qasim, Jan Kieseler, Yutaro Iiyama, and Maurizio Pierini.
+\newblock Learning representations of irregular particle-detector geometry with
+  distance-weighted graph networks.
+\newblock \emph{European Physical Journal C}, 79\penalty0 (7):\penalty0 608,
+  2019.
+\newblock \doi{10.1140/epjc/s10052-019-7113-9}.
+\newblock URL \url{https://arxiv.org/abs/1902.07987}.
+
+\bibitem[Qu and Gouskos(2020)]{qu2020particlenet}
+Huilin Qu and Loukas Gouskos.
+\newblock Particlenet: Jet tagging via particle clouds.
+\newblock \emph{Physical Review D}, 101\penalty0 (5):\penalty0 056019, 2020.
+\newblock \doi{10.1103/PhysRevD.101.056019}.
+\newblock URL \url{https://arxiv.org/abs/1902.08570}.
+
+\bibitem[Qu et~al.(2022)Qu, Li, and Qian]{qu2022part}
+Huilin Qu, Congqiao Li, and Sitian Qian.
+\newblock Particle transformer for jet tagging.
+\newblock \emph{Proceedings of Machine Learning Research}, 162:\penalty0
+  18281--18292, 2022.
+\newblock \doi{10.48550/arXiv.2202.03772}.
+\newblock URL \url{https://arxiv.org/abs/2202.03772}.
 
 \bibitem[Kieseler(2020)]{kieseler2020objectcondensation}
 Jan Kieseler.
@@ -31,181 +130,5 @@ Dolores Garcia, Lena Herrmann, Gregor Krzmanc, and Michele Selvaggi.
   colliders.
 \newblock \emph{arXiv preprint arXiv:2603.04084}, 2026.
 \newblock URL \url{https://arxiv.org/abs/2603.04084}.
-
-\bibitem[Young et~al.(2025)Young, Jwa, and Terao]{young2025polarmae}
-Sam Young, Yeon-jae Jwa, and Kazuhiro Terao.
-\newblock Particle trajectory representation learning with masked point
-  modeling.
-\newblock \emph{arXiv preprint arXiv:2502.02558}, 2025.
-\newblock \doi{10.48550/arXiv.2502.02558}.
-\newblock URL \url{https://arxiv.org/abs/2502.02558}.
-
-\bibitem[Young and Terao(2025)]{young2025panda}
-Samuel Young and Kazuhiro Terao.
-\newblock Panda: Self-distillation of reusable sensor-level representations for
-  high energy physics.
-\newblock \emph{arXiv preprint arXiv:2512.01324}, 2025.
-\newblock \doi{10.48550/arXiv.2512.01324}.
-\newblock URL \url{https://arxiv.org/abs/2512.01324}.
-
-\bibitem[Park et~al.(2025)Park, Li, Huang, Luo, Yu, Go, Pinkenburg, Lin, Yoo,
-  Osborn, Huang, and Ren]{park2025fm4npp}
-David Park, Shuhang Li, Yi~Huang, Xihaier Luo, Haiwang Yu, Yeonju Go,
-  Christopher Pinkenburg, Yuewei Lin, Shinjae Yoo, Joseph Osborn, Jin Huang,
-  and Yihui Ren.
-\newblock Fm4npp: A scaling foundation model for nuclear and particle physics.
-\newblock \emph{arXiv preprint arXiv:2508.14087}, 2025.
-\newblock \doi{10.48550/arXiv.2508.14087}.
-\newblock URL \url{https://arxiv.org/abs/2508.14087}.
-
-\bibitem[Ester et~al.(1996)Ester, Kriegel, Sander, and Xu]{ester1996dbscan}
-Martin Ester, Hans-Peter Kriegel, J{\"o}rg Sander, and Xiaowei Xu.
-\newblock A density-based algorithm for discovering clusters in large spatial
-  databases with noise.
-\newblock In \emph{Proceedings of the Second International Conference on
-  Knowledge Discovery and Data Mining (KDD)}, pages 226--231, 1996.
-
-\bibitem[Birant and Kut(2007)]{birant2007stdbscan}
-Derya Birant and Alp Kut.
-\newblock St-dbscan: An algorithm for clustering spatial-temporal data.
-\newblock \emph{Data \& Knowledge Engineering}, 60\penalty0 (1):\penalty0
-  208--221, 2007.
-\newblock \doi{10.1016/j.datak.2006.01.013}.
-
-\bibitem[Graham and van~der Maaten(2017)]{graham2017submanifold}
-Benjamin Graham and Laurens van~der Maaten.
-\newblock Submanifold sparse convolutional networks.
-\newblock \emph{arXiv preprint arXiv:1706.01307}, 2017.
-\newblock \doi{10.48550/arXiv.1706.01307}.
-\newblock URL \url{https://arxiv.org/abs/1706.01307}.
-
-\bibitem[Choy et~al.(2019)Choy, Gwak, and Savarese]{choy2019minkowski}
-Christopher Choy, JunYoung Gwak, and Silvio Savarese.
-\newblock 4d spatio-temporal convnets: Minkowski convolutional neural networks.
-\newblock \emph{arXiv preprint arXiv:1904.08755}, 2019.
-\newblock \doi{10.48550/arXiv.1904.08755}.
-\newblock URL \url{https://arxiv.org/abs/1904.08755}.
-
-\bibitem[Drielsma et~al.(2021)Drielsma, Terao, Domin{\'e}, and
-  Koh]{drielsma2021spine}
-Francois Drielsma, Kazuhiro Terao, Laura Domin{\'e}, and Dae~Heun Koh.
-\newblock Scalable, end-to-end, deep-learning-based data reconstruction chain
-  for particle imaging detectors.
-\newblock \emph{arXiv preprint arXiv:2102.01033}, 2021.
-\newblock \doi{10.48550/arXiv.2102.01033}.
-\newblock URL \url{https://arxiv.org/abs/2102.01033}.
-
-\bibitem[Qasim et~al.(2019)Qasim, Kieseler, Iiyama, and
-  Pierini]{qasim2019gravnet}
-Shah~Rukh Qasim, Jan Kieseler, Yutaro Iiyama, and Maurizio Pierini.
-\newblock Learning representations of irregular particle-detector geometry with
-  distance-weighted graph networks.
-\newblock \emph{European Physical Journal C}, 79\penalty0 (7):\penalty0 608,
-  2019.
-\newblock \doi{10.1140/epjc/s10052-019-7113-9}.
-\newblock URL \url{https://arxiv.org/abs/1902.07987}.
-
-\bibitem[Shlomi et~al.(2021)Shlomi, Battaglia, and Vlimant]{shlomi2020gnn}
-Jonathan Shlomi, Peter Battaglia, and Jean-Roch Vlimant.
-\newblock Graph neural networks in particle physics.
-\newblock \emph{Machine Learning: Science and Technology}, 2\penalty0
-  (2):\penalty0 021001, 2021.
-\newblock \doi{10.1088/2632-2153/abbf9a}.
-\newblock URL \url{https://arxiv.org/abs/2007.13681}.
-
-\bibitem[Thais et~al.(2022)Thais, Calafiura, Chachamis, DeZoort, Duarte,
-  Ganguly, Kagan, Murnane, Neubauer, and Terao]{thais2022gnnreview}
-Savannah Thais, Paolo Calafiura, Grigorios Chachamis, Gage DeZoort, Javier
-  Duarte, Sanmay Ganguly, Michael Kagan, Daniel Murnane, Mark~S. Neubauer, and
-  Kazuhiro Terao.
-\newblock Graph neural networks in particle physics: Implementations,
-  innovations, and challenges.
-\newblock \emph{arXiv preprint arXiv:2203.12852}, 2022.
-\newblock \doi{10.48550/arXiv.2203.12852}.
-\newblock URL \url{https://arxiv.org/abs/2203.12852}.
-
-\bibitem[Qu and Gouskos(2020)]{qu2020particlenet}
-Huilin Qu and Loukas Gouskos.
-\newblock Particlenet: Jet tagging via particle clouds.
-\newblock \emph{Physical Review D}, 101\penalty0 (5):\penalty0 056019, 2020.
-\newblock \doi{10.1103/PhysRevD.101.056019}.
-\newblock URL \url{https://arxiv.org/abs/1902.08570}.
-
-\bibitem[Qu et~al.(2022)Qu, Li, and Qian]{qu2022part}
-Huilin Qu, Congqiao Li, and Sitian Qian.
-\newblock Particle transformer for jet tagging.
-\newblock \emph{Proceedings of Machine Learning Research}, 162:\penalty0
-  18281--18292, 2022.
-\newblock \doi{10.48550/arXiv.2202.03772}.
-\newblock URL \url{https://arxiv.org/abs/2202.03772}.
-
-\bibitem[Robles et~al.(2025)Robles, Yankelevich, Wu, Bian, and
-  Baldi]{robles2025pointset}
-Edgar~E. Robles, Alejandro Yankelevich, Wenjie Wu, Jianming Bian, and Pierre
-  Baldi.
-\newblock Particle hit clustering and identification using point set
-  transformers in liquid argon time projection chambers.
-\newblock \emph{arXiv preprint arXiv:2504.08182}, 2025.
-\newblock \doi{10.48550/arXiv.2504.08182}.
-\newblock URL \url{https://arxiv.org/abs/2504.08182}.
-
-\bibitem[Matousek and Vossen(2025)]{matousek2025clas12_oc}
-Gregory Matousek and Anselm Vossen.
-\newblock Ai-assisted object condensation clustering for calorimeter shower
-  reconstruction at clas12.
-\newblock \emph{arXiv preprint arXiv:2503.11277}, 2025.
-\newblock \doi{10.48550/arXiv.2503.11277}.
-\newblock URL \url{https://arxiv.org/abs/2503.11277}.
-
-\bibitem[Hallin(2025)]{hallin2025foundationreview}
-Anna Hallin.
-\newblock Foundation models for high-energy physics.
-\newblock \emph{arXiv preprint arXiv:2509.21434}, 2025.
-\newblock \doi{10.48550/arXiv.2509.21434}.
-\newblock URL \url{https://arxiv.org/abs/2509.21434}.
-
-\bibitem[Wemmer et~al.(2023)Wemmer, Haide, Eppelt, Ferber,
-  et~al.]{wemmer2023belle2}
-F.~Wemmer, I.~Haide, J.~Eppelt, T.~Ferber, et~al.
-\newblock Photon reconstruction in the belle ii calorimeter using graph neural
-  networks.
-\newblock \emph{Computing and Software for Big Science}, 7:\penalty0 13, 2023.
-\newblock \doi{10.1007/s41781-023-00105-w}.
-\newblock URL \url{https://arxiv.org/abs/2306.04179}.
-
-\bibitem[Hewes et~al.(2024)Hewes, Aurisano, Cerati, Kowalkowski, Lee, Liao,
-  Grzenda, Gumpula, and Zhang]{hewes2024nugraph2}
-V.~Hewes, Adam Aurisano, Giuseppe Cerati, Jim Kowalkowski, Claire Lee, Wei-keng
-  Liao, Daniel Grzenda, Kaushal Gumpula, and Xiaohe Zhang.
-\newblock Graph neural network for neutrino physics event reconstruction.
-\newblock \emph{Physical Review D}, 110\penalty0 (3):\penalty0 032008, 2024.
-\newblock \doi{10.1103/PhysRevD.110.032008}.
-\newblock URL \url{https://arxiv.org/abs/2403.11872}.
-
-\bibitem[Reuter et~al.(2025)Reuter, De~Pietro, Stefkova, Ferber,
-  et~al.]{reuter2025belle2}
-Lea Reuter, Giacomo De~Pietro, Slavomira Stefkova, Torben Ferber, et~al.
-\newblock End-to-end multi-track reconstruction using graph neural networks at
-  belle ii.
-\newblock \emph{Computing and Software for Big Science}, 9:\penalty0 6, 2025.
-\newblock \doi{10.1007/s41781-025-00135-6}.
-\newblock URL \url{https://arxiv.org/abs/2411.13596}.
-
-\bibitem[Kobylianskii et~al.(2025)Kobylianskii, Van~Stroud, Wong, Hart, Dreyer,
-  Gross, Facini, and Scanlon]{kobylianskii2025glow}
-Dmitrii Kobylianskii, Samuel Van~Stroud, Kwok~Yiu Wong, Max Hart, Etienne
-  Dreyer, Eilam Gross, Gabriel Facini, and Tim Scanlon.
-\newblock Glow: A unified particle flow transformer.
-\newblock \emph{arXiv preprint arXiv:2508.20092}, 2025.
-\newblock \doi{10.48550/arXiv.2508.20092}.
-\newblock URL \url{https://arxiv.org/abs/2508.20092}.
-
-\bibitem[Giroux and Fanelli(2025)]{giroux2025readoutfm}
-James Giroux and Cristiano Fanelli.
-\newblock Towards foundation models for experimental readout systems combining
-  discrete and continuous data.
-\newblock \emph{arXiv preprint arXiv:2505.08736}, 2025.
-\newblock \doi{10.48550/arXiv.2505.08736}.
-\newblock URL \url{https://arxiv.org/abs/2505.08736}.
 
 \end{thebibliography}

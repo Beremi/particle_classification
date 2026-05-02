@@ -8,7 +8,13 @@ import numpy as np
 from IPython.display import HTML
 from matplotlib import colors
 from matplotlib.animation import FuncAnimation, PillowWriter
-from sklearn.cluster import DBSCAN
+
+try:
+    from sklearn.cluster import DBSCAN
+except Exception:  # pragma: no cover - optional dependency
+    DBSCAN = None
+
+from particle_classification.clustering import dbscan_labels
 
 from .models import DBSCANResult, MatrixRecord
 
@@ -243,7 +249,10 @@ def run_dbscan(
     ys = np.array([entry.y for entry in record.entries], dtype=float)
     energies = np.array([entry.energy for entry in record.entries], dtype=float)
     features = np.column_stack([xs, ys])
-    labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(features)
+    if DBSCAN is None:
+        labels = dbscan_labels(features, eps=eps, min_samples=min_samples)
+    else:
+        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(features)
 
     return DBSCANResult(
         features=features,
