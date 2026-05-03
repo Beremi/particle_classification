@@ -15,7 +15,7 @@ from .data.particles import (
     build_particle_outputs,
     tune_dbscan_parameters,
 )
-from .edge_training import EdgeTrainConfig, run_edge_preliminary_experiment, train_edge_tracknet
+from .edge_training import EdgeTrainConfig, evaluate_phase1, run_edge_preliminary_experiment, train_edge_tracknet
 from .training import train_baseline_from_config
 
 
@@ -145,6 +145,8 @@ def build_edge_training_set_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--radius", type=float, default=3.5)
     parser.add_argument("--min-stability-ari", type=float, default=0.75)
     parser.add_argument("--seed", type=int, default=20260503)
+    parser.add_argument("--split-strategy", choices=["group-source", "random-window"], default="group-source")
+    parser.add_argument("--teacher-name", default="dbscan_v001")
     args = parser.parse_args(argv)
 
     config = EdgeDatasetConfig(
@@ -155,6 +157,9 @@ def build_edge_training_set_main(argv: list[str] | None = None) -> None:
         min_stability_ari=args.min_stability_ari,
         max_windows=args.max_windows,
         seed=args.seed,
+        split_strategy=args.split_strategy,
+        teacher_name=args.teacher_name,
+        label_source="teacher_dbscan",
     )
     result = build_edge_training_set(
         args.input,
@@ -183,6 +188,8 @@ def build_edge_mixed_set_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--k-neighbors", type=int, default=16)
     parser.add_argument("--radius", type=float, default=4.5)
     parser.add_argument("--seed", type=int, default=20260503)
+    parser.add_argument("--split-strategy", choices=["group-source", "random-window"], default="group-source")
+    parser.add_argument("--teacher-name", default="dbscan_v001")
     args = parser.parse_args(argv)
 
     config = MixedEdgeDatasetConfig(
@@ -196,6 +203,8 @@ def build_edge_mixed_set_main(argv: list[str] | None = None) -> None:
         max_particles=args.max_particles,
         k_neighbors=args.k_neighbors,
         radius=args.radius,
+        split_strategy=args.split_strategy,
+        teacher_name=args.teacher_name,
     )
     result = build_mixed_edge_training_set(
         args.input,
@@ -232,6 +241,8 @@ def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--target-object-accuracy", type=float, default=0.90)
     parser.add_argument("--target-energy-error", type=float, default=0.20)
     parser.add_argument("--no-threshold-sweep", action="store_true")
+    parser.add_argument("--edge-loss", choices=["bce", "focal"], default="focal")
+    parser.add_argument("--embedding-loss-weight", type=float, default=0.0)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
 
@@ -256,6 +267,8 @@ def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
         target_object_accuracy=args.target_object_accuracy,
         target_energy_error=args.target_energy_error,
         threshold_sweep=not args.no_threshold_sweep,
+        edge_loss=args.edge_loss,
+        embedding_loss_weight=args.embedding_loss_weight,
     )
     result = train_edge_tracknet(args.manifest, args.out, config=config, device=args.device, verbose=True)
     print(json.dumps(result, indent=2))
@@ -310,6 +323,8 @@ def run_edge_replacement_search_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--target-merge-rate", type=float, default=0.08)
     parser.add_argument("--target-object-accuracy", type=float, default=0.90)
     parser.add_argument("--target-energy-error", type=float, default=0.20)
+    parser.add_argument("--edge-loss", choices=["bce", "focal"], default="focal")
+    parser.add_argument("--embedding-loss-weight", type=float, default=0.0)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
 
@@ -343,6 +358,8 @@ def run_edge_replacement_search_main(argv: list[str] | None = None) -> None:
             target_merge_rate=args.target_merge_rate,
             target_object_accuracy=args.target_object_accuracy,
             target_energy_error=args.target_energy_error,
+            edge_loss=args.edge_loss,
+            embedding_loss_weight=args.embedding_loss_weight,
         ),
         device=args.device,
         verbose=True,
@@ -352,6 +369,29 @@ def run_edge_replacement_search_main(argv: list[str] | None = None) -> None:
     (args.experiment_out / "replacement_search_summary.json").write_text(
         json.dumps(result, indent=2, sort_keys=True),
         encoding="utf-8",
+    )
+    print(json.dumps(result, indent=2))
+
+
+def evaluate_phase1_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Evaluate Phase 1 EdgeTrackNet checkpoints by label source and buckets.")
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path, action="append", required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--normalization", type=Path, default=None)
+    parser.add_argument("--label-source", action="append", default=None)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--max-windows", type=int, default=256)
+    args = parser.parse_args(argv)
+
+    result = evaluate_phase1(
+        args.checkpoint,
+        args.manifest,
+        args.out,
+        normalization=args.normalization,
+        label_sources=args.label_source,
+        device=args.device,
+        max_windows=args.max_windows,
     )
     print(json.dumps(result, indent=2))
 

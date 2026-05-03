@@ -32,6 +32,7 @@ particle-build-edge-mixed-set = "particle_classification.cli:build_edge_mixed_se
 particle-train-edge-tracknet = "particle_classification.cli:train_edge_tracknet_main"
 particle-run-edge-experiment = "particle_classification.cli:run_edge_experiment_main"
 particle-run-edge-replacement-search = "particle_classification.cli:run_edge_replacement_search_main"
+particle-evaluate-phase1 = "particle_classification.cli:evaluate_phase1_main"
 particle-train-baseline = "particle_classification.cli:train_baseline_main"
 
 [tool.setuptools.packages.find]

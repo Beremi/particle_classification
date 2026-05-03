@@ -5,11 +5,15 @@ import numpy as np
 import torch
 
 from particle_classification.data.edge_training import (
+    EDGE_ATTR_NAMES,
     EdgeDatasetConfig,
+    FEATURE_NAMES,
+    assign_group_split,
     build_edge_training_set,
     edge_labels,
     make_edge_window,
 )
+from particle_classification.data.human_gold import HUMAN_GOLD_COLUMNS, load_human_gold_csv
 from particle_classification.data.edge_mixing import MixedEdgeDatasetConfig, build_mixed_edge_training_set
 from particle_classification.data.particles import DBSCANParticleParams
 from particle_classification.edge_training import (
@@ -30,8 +34,9 @@ def test_edge_window_generation_and_labels():
     edge_window = make_edge_window(window, params=params, config=config)
 
     assert edge_window is not None
-    assert edge_window["features"].shape == (7, 7)
+    assert edge_window["features"].shape == (7, len(FEATURE_NAMES))
     assert edge_window["edge_index"].shape[0] == 2
+    assert edge_window["edge_attr"].shape[1] == len(EDGE_ATTR_NAMES)
     labels = edge_labels(edge_window["edge_index"], window["hit_particle_id"])
     assert np.any(labels == 1)
     assert np.any(labels == 0)
@@ -50,15 +55,23 @@ def test_edge_tracknet_forward_loss_and_components():
     assert edge_window is not None
     item = {key: value for key, value in edge_window.items() if isinstance(value, np.ndarray)}
     batch = collate_edge_windows([{**item, "path": "synthetic"}])
-    model = EdgeTrackNetTiny(input_dim=7, hidden_dim=16, edge_hidden_dim=16, message_passing_steps=1)
+    model = EdgeTrackNetTiny(
+        input_dim=len(FEATURE_NAMES),
+        edge_attr_dim=len(EDGE_ATTR_NAMES),
+        hidden_dim=16,
+        edge_hidden_dim=16,
+        message_passing_steps=1,
+    )
 
-    output = model(batch["features"], batch["edge_index"])
+    output = model(batch["features"], batch["edge_index"], batch["edge_attr"])
     loss, metrics = edge_tracknet_loss(output, batch)
     pred = connected_components_from_edges(
         int(batch["features"].shape[0]),
         batch["edge_index"].numpy(),
         torch.sigmoid(output["edge_logits"]).detach().numpy(),
         torch.sigmoid(output["object_logits"]).detach().numpy(),
+        batch["edge_attr"].numpy(),
+        batch["features"].numpy(),
     )
 
     assert output["edge_logits"].shape[0] == batch["edge_index"].shape[1]
@@ -108,6 +121,7 @@ def test_build_edge_training_set_and_train_smoke(tmp_path):
     assert Path(train_result["checkpoint"]).exists()
     assert Path(tmp_path / "experiment" / "threshold_sweep.csv").exists()
     assert "selected_edge_threshold" in train_result
+    assert Path(tmp_path / "edge_dataset" / "normalization.json").exists()
 
 
 def test_build_mixed_edge_training_set_from_shifted_templates(tmp_path):
@@ -150,6 +164,30 @@ def test_build_mixed_edge_training_set_from_shifted_templates(tmp_path):
     assert len(rows) == 4
     assert len(set(labels.tolist()) - {-1}) >= 2
     assert int(rows[0]["negative_edges"]) > 0
+
+
+def test_group_split_no_source_leakage():
+    sources = ["a.t3pa", "b.t3pa", "a.t3pa", "folder/c.t3pa"]
+    splits = [assign_group_split(source, seed=123, val_fraction=0.2, test_fraction=0.2) for source in sources]
+
+    assert splits[0] == splits[2]
+    assert set(splits) <= {"train", "val", "test"}
+
+
+def test_human_gold_manifest_loader_empty_and_nonempty(tmp_path):
+    missing = tmp_path / "missing.csv"
+    assert load_human_gold_csv(missing) == []
+
+    path = tmp_path / "gold.csv"
+    path.write_text(
+        ",".join(HUMAN_GOLD_COLUMNS)
+        + "\nsource.t3pa,window.npz,12,3,1,me,ok\n",
+        encoding="utf-8",
+    )
+    rows = load_human_gold_csv(path)
+
+    assert len(rows) == 1
+    assert rows[0].gold_particle_id == 3
 
 
 def test_model_selection_score_penalizes_split_merge_energy():

@@ -311,7 +311,7 @@ class DatasetFromManifest:
 
 def load_window(path: Path) -> dict:
     with np.load(path, allow_pickle=False) as data:
-        return {
+        item = {
             "features": data["features"].astype(np.float32),
             "edge_index": data["edge_index"].astype(np.int64),
             "edge_label": data["edge_label"].astype(np.int64),
@@ -325,6 +325,11 @@ def load_window(path: Path) -> dict:
             "hit_time": data["hit_time"].astype(np.float64),
             "path": path.as_posix(),
         }
+        if "edge_attr" in data.files:
+            item["edge_attr"] = data["edge_attr"].astype(np.float32)
+        if "edge_type" in data.files:
+            item["edge_type"] = data["edge_type"].astype(np.uint8)
+        return item
 
 
 def repo_path(path: str | Path) -> Path:
@@ -335,7 +340,7 @@ def repo_path(path: str | Path) -> Path:
 def predict_labels(run: LoadedRun, item: dict, *, edge_threshold: float, object_threshold: float) -> tuple[np.ndarray, np.ndarray]:
     batch = move_batch_tensors(collate_edge_windows([item]), run.device)
     with torch.no_grad():
-        output = run.model(batch["features"], batch["edge_index"])
+        output = run.model(batch["features"], batch["edge_index"], batch.get("edge_attr"))
     edge_scores = torch.sigmoid(output["edge_logits"]).detach().cpu().numpy()
     object_scores = torch.sigmoid(output["object_logits"]).detach().cpu().numpy()
     labels = connected_components_from_edges(
@@ -343,6 +348,8 @@ def predict_labels(run: LoadedRun, item: dict, *, edge_threshold: float, object_
         item["edge_index"],
         edge_scores,
         object_scores,
+        np.asarray(item["edge_attr"]) if "edge_attr" in item else None,
+        np.asarray(item["features"]) if "features" in item else None,
         edge_threshold=edge_threshold,
         object_threshold=object_threshold,
     )

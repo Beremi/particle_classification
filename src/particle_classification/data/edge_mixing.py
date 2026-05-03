@@ -11,10 +11,12 @@ from .edge_training import (
     EdgeDatasetConfig,
     ParticleShard,
     assign_split,
+    assign_window_split,
     discover_particle_shards,
     edge_window_manifest_row,
     load_particle_shard,
     make_edge_window,
+    apply_dataset_normalization,
     summarize_manifest,
     write_edge_window_npz,
 )
@@ -41,6 +43,8 @@ class MixedEdgeDatasetConfig:
     val_fraction: float = 0.15
     test_fraction: float = 0.15
     detector_size: int = 256
+    split_strategy: str = "group-source"
+    teacher_name: str = "dbscan_v001"
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,18 @@ def build_mixed_edge_training_set(
     np_rng = np.random.default_rng(config.seed)
 
     templates = collect_particle_templates(input_path, manifest=manifest, config=config, rng=rng, verbose=verbose)
+    templates_by_split: dict[str, list[ParticleTemplate]] = {"train": [], "val": [], "test": []}
+    split_config = EdgeDatasetConfig(
+        seed=config.seed,
+        val_fraction=config.val_fraction,
+        test_fraction=config.test_fraction,
+        split_strategy=config.split_strategy,
+        teacher_name=config.teacher_name,
+        label_source="synthetic_truth",
+    )
+    for template in templates:
+        split = assign_window_split(template.source_path, rng, split_config)
+        templates_by_split.setdefault(split, []).append(template)
     if verbose:
         print(f"collected {len(templates)} particle templates for mixed-window generation", flush=True)
 
@@ -94,19 +110,29 @@ def build_mixed_edge_training_set(
         val_fraction=config.val_fraction,
         test_fraction=config.test_fraction,
         seed=config.seed,
+        split_strategy=config.split_strategy,
+        teacher_name=config.teacher_name,
+        label_source="synthetic_truth",
     )
     manifest_rows: list[dict[str, object]] = []
     attempts = 0
     while len(manifest_rows) < config.windows and attempts < config.windows * 20:
         attempts += 1
-        use_synthetic = not templates or rng.random() < config.synthetic_fraction
+        available_template_splits = [name for name, pool in templates_by_split.items() if pool]
+        use_synthetic = not available_template_splits or rng.random() < config.synthetic_fraction
         hard = rng.random() < config.hard_fraction
+        requested_split = assign_split(rng, edge_config)
         if use_synthetic:
             window, source_label = make_procedural_window(rng, np_rng, params=params, config=config, hard=hard)
             generator = "procedural"
+            split_group = f"procedural:{config.seed}:{len(manifest_rows) // 100}"
+            split = assign_window_split(split_group, rng, edge_config)
         else:
+            if not templates_by_split.get(requested_split):
+                requested_split = rng.choice(available_template_splits)
+            split_templates = templates_by_split[requested_split]
             window, source_label = make_mixed_template_window(
-                templates,
+                split_templates,
                 rng,
                 np_rng,
                 params=params,
@@ -114,6 +140,8 @@ def build_mixed_edge_training_set(
                 hard=hard,
             )
             generator = "mixed_templates"
+            split_group = source_label
+            split = requested_split
 
         edge_window = make_edge_window(
             window,
@@ -124,13 +152,21 @@ def build_mixed_edge_training_set(
         if edge_window is None:
             continue
 
-        split = assign_split(rng, edge_config)
         window_id = len(manifest_rows)
         rel_name = f"mixed_window_{window_id:07d}.npz"
         path = windows_dir / rel_name
         shard = ParticleShard(path=Path(source_label), source_path=source_label, row_count=int(window["hit_x"].shape[0]))
         write_edge_window_npz(path, edge_window, shard, window_id, split, params)
-        row = edge_window_manifest_row(path, edge_window, shard, window_id, split)
+        row = edge_window_manifest_row(
+            path,
+            edge_window,
+            shard,
+            window_id,
+            split,
+            split_group=split_group,
+            config=edge_config,
+            params=params,
+        )
         row["generator"] = generator
         row["hard_case"] = int(hard)
         row["component_sources"] = source_label
@@ -140,10 +176,12 @@ def build_mixed_edge_training_set(
 
     manifest_path = output / "manifest.csv"
     write_dict_rows(manifest_path, manifest_rows)
+    normalization = apply_dataset_normalization(output, manifest_rows, params=params, config=edge_config)
     summary = {
         "windows_requested": config.windows,
         "attempts": attempts,
         "templates": len(templates),
+        "normalization": normalization,
         **summarize_manifest(manifest_rows),
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")

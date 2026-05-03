@@ -1,0 +1,23 @@
+{
+  "eps": 5.0,
+  "full_scan_threshold": 250000,
+  "max_hits_per_file": 25000,
+  "min_samples": 3,
+  "sample_files": [
+    "08_thu_proton_daily_batch/toa_tot__r0000007303.t3pa",
+    "08_thu_proton_daily_batch/toa_tot__r0000007298.t3pa",
+    "F08/tot_toa__r0000000047.t3pa",
+    "D05/tot_toa__r0000000005.t3pa",
+    "F08/tot_toa__r0000000006.t3pa",
+    "D05/tot_toa__r0000000030.t3pa",
+    "13_tue_proton_daily_batch/toa_tot__r0000028554.t3pa",
+    "F08/tot_toa__r0000000044.t3pa",
+    "08_thu_proton_daily_batch/toa_tot__r0000007293.t3pa",
+    "D05/tot_toa__r0000000028.t3pa"
+  ],
+  "score": 0.5636681477231809,
+  "seed": 20260502,
+  "time_scale": 15000000.0,
+  "window_overlap": 25000,
+  "window_size": 250000
+}
