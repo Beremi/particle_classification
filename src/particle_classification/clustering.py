@@ -114,6 +114,68 @@ def dbscan_labels(features: np.ndarray, *, eps: float, min_samples: int) -> np.n
     )
 
 
+def dbscan_labels_pairs(features: np.ndarray, *, eps: float, min_samples: int) -> np.ndarray:
+    """Exact DBSCAN using radius pairs and sparse connected components.
+
+    This keeps DBSCAN semantics while avoiding the large Python list-of-lists
+    produced by `cKDTree.query_ball_tree` in the default backend.
+    """
+
+    features = np.asarray(features, dtype=float)
+    if features.ndim != 2:
+        raise ValueError("DBSCAN features must be a 2D array.")
+    n_points = int(features.shape[0])
+    labels = np.full(n_points, -1, dtype=int)
+    if n_points == 0:
+        return labels
+
+    from scipy.sparse import coo_matrix  # type: ignore
+    from scipy.sparse.csgraph import connected_components  # type: ignore
+    from scipy.spatial import cKDTree  # type: ignore
+
+    tree = cKDTree(features)
+    pairs = tree.query_pairs(float(eps), output_type="ndarray")
+    if pairs.size == 0:
+        if min_samples <= 1:
+            labels[:] = np.arange(n_points, dtype=int)
+        return labels
+    pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
+
+    neighbor_counts = np.ones(n_points, dtype=np.int64)
+    neighbor_counts += np.bincount(pairs.reshape(-1), minlength=n_points)
+    core = neighbor_counts >= int(min_samples)
+    if not bool(np.any(core)):
+        return labels
+
+    core_pair_mask = core[pairs[:, 0]] & core[pairs[:, 1]]
+    core_pairs = pairs[core_pair_mask]
+    if core_pairs.size:
+        rows = np.concatenate([core_pairs[:, 0], core_pairs[:, 1]])
+        cols = np.concatenate([core_pairs[:, 1], core_pairs[:, 0]])
+        data = np.ones(rows.shape[0], dtype=np.uint8)
+        graph = coo_matrix((data, (rows, cols)), shape=(n_points, n_points)).tocsr()
+    else:
+        graph = coo_matrix((n_points, n_points), dtype=np.uint8).tocsr()
+    _, components = connected_components(graph, directed=False, return_labels=True)
+
+    root_to_label: dict[int, int] = {}
+    core_indices = np.flatnonzero(core)
+    for point_idx in core_indices.tolist():
+        component = int(components[point_idx])
+        if component not in root_to_label:
+            root_to_label[component] = len(root_to_label)
+        labels[point_idx] = root_to_label[component]
+
+    for left, right in pairs.tolist():
+        left = int(left)
+        right = int(right)
+        if labels[left] == -1 and core[right]:
+            labels[left] = labels[right]
+        if labels[right] == -1 and core[left]:
+            labels[right] = labels[left]
+    return labels
+
+
 def _dbscan_with_region_query(n_points, *, region_query, min_samples: int) -> np.ndarray:
     labels = np.full(n_points, -1, dtype=int)
     visited = np.zeros(n_points, dtype=bool)

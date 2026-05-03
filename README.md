@@ -1,6 +1,6 @@
 # Particle Classification from Sparse Timepix Detector Hits
 
-This repository is now a runnable implementation and testing ground for neural-network particle-candidate classification. The central design rule is **XY invariance**: detector-plane rotation is computed and stored as metadata, but it is not allowed to define a particle morphology class.
+This repository is now a runnable implementation and testing ground for Timepix particle-candidate extraction and classification. The Phase 1 particle-separation baseline is a custom native 3D DBSCAN implementation, while neural-network separator attempts are archived as research notes for later learned alternatives. The central design rule for downstream classification remains **XY invariance**: detector-plane rotation is computed and stored as metadata, but it is not allowed to define a particle morphology class.
 
 ## Current Status
 
@@ -10,8 +10,10 @@ This repository is now a runnable implementation and testing ground for neural-n
 - Legacy visualization package kept importable as [`src/particle_viz`](src/particle_viz)
 - Updated English report: [`particle_nn_report_updated/particle_nn_report.tex`](particle_nn_report_updated/particle_nn_report.tex)
 - First NN baseline: compact PointNet/DeepSets-style `XYInvariantParticleNet`
-- Phase 1 DBSCAN replacement: leakage-safe `EdgeTrackNetTiny` edge model with source-grouped splits, versioned `dbscan_v001` teacher metadata, 11-feature hit schema, multi-scale graphs, bridge-safe readout, focal edge loss, and bucketed evaluation.
-- Latest Phase 1 hardening run note: [`docs/phase1-hardening-v001-results.md`](docs/phase1-hardening-v001-results.md)
+- Active Phase 1 separator baseline: custom C/OpenMP `native-grid-dbscan`, documented in [`docs/phase1-native-grid-baseline.md`](docs/phase1-native-grid-baseline.md)
+- Full native backend validation: 711/711 files and 44,725,206/44,725,206 hits match `dbscan_v001` exactly
+- 3D clustering speed report: [`docs/clustering-speed-report.md`](docs/clustering-speed-report.md)
+- Archived Phase 1 NN reports: [`docs/phase1-nn-full-report.md`](docs/phase1-nn-full-report.md), [`docs/phase1-hardening-v001-results.md`](docs/phase1-hardening-v001-results.md), and [`docs/phase1-dbscan-replacement-report.md`](docs/phase1-dbscan-replacement-report.md)
 
 ## Design Contract
 
@@ -82,16 +84,39 @@ particle-tune-dbscan \
   --out local_data/processed/dbscan_tuning_v001
 ```
 
-Build per-file particle NPZ shards:
+Build per-file particle NPZ shards with the active Phase 1 baseline:
 
 ```bash
 particle-build-particles \
   --input local_data/raw \
   --index data/raw_data_index.csv \
   --params configs/teachers/dbscan_v001.json \
-  --out local_data/processed/particles_dbscan_v001 \
-  --skip-existing
+  --out local_data/processed/particles_native_grid_v001 \
+  --backend native-grid-dbscan \
+  --threads 32
 ```
+
+Benchmark exact and experimental 3D clustering backends:
+
+```bash
+particle-benchmark-clustering \
+  --input local_data/raw \
+  --params configs/teachers/dbscan_v001.json \
+  --out local_data/benchmarks/clustering_native_v001 \
+  --cases largest,slowest_per_hit,max_particles \
+  --backend ckdtree-pairs \
+  --backend numba-grid-dbscan \
+  --backend native-grid-dbscan \
+  --backend numba-stream-grid-linker \
+  --backend native-stream-grid-linker \
+  --threads 32 \
+  --repeat-runs 1 \
+  --toa-tick-ns 25
+```
+
+The neural Phase 1 separator attempts are archived for now. The commands below
+remain available for reproducing those experiments, but they are not the active
+Phase 1 baseline.
 
 Build leakage-safe pass-1 EdgeTrackNet pseudo-label windows:
 
@@ -151,6 +176,34 @@ particle-evaluate-phase1 \
   --device cuda
 ```
 
+Build and fine-tune a real/hard curriculum from the Stage A checkpoint:
+
+```bash
+particle-build-edge-curriculum-set \
+  --real-manifest local_data/processed/pass1_edge_real_stable_v001/manifest.csv \
+  --mixed-manifest local_data/processed/pass1_edge_mixed_hard_v001/manifest.csv \
+  --normalization local_data/processed/pass1_edge_real_stable_v001/normalization.json \
+  --out local_data/processed/pass1_edge_curriculum_v001 \
+  --train-real-ratio 0.50 \
+  --val-real-ratio 0.50 \
+  --test-real-ratio 0.50
+
+particle-train-edge-tracknet \
+  --manifest local_data/processed/pass1_edge_curriculum_v001/manifest.csv \
+  --out local_data/experiments/phase1_C_curriculum_finetune \
+  --init-checkpoint local_data/experiments/phase1_A_real_stable/edge_tracknet_tiny.pt \
+  --steps 10000 \
+  --min-steps 3000 \
+  --batch-size 4 \
+  --learning-rate 0.0002 \
+  --hidden-dim 128 \
+  --edge-hidden-dim 128 \
+  --message-passing-steps 2 \
+  --edge-loss focal \
+  --embedding-loss-weight 0.03 \
+  --device cuda
+```
+
 Run the preliminary DBSCAN-replacement experiment:
 
 ```bash
@@ -186,7 +239,7 @@ particle-train-baseline --config configs/baseline.yaml
 ## Modeling Roadmap
 
 1. Deterministic XY-invariant descriptors from weighted PCA and energy-density profiles.
-2. DBSCAN as an interpretable candidate generator and bootstrap baseline.
-3. `XYInvariantParticleNet` trained with rotation-invariance and profile losses.
-4. Optional stronger point models: EdgeConv, GravNet-style blocks, point transformers.
-5. Learned clustering or object condensation once simulation or hit-level truth exists.
+2. `native-grid-dbscan` as the active real-time Phase 1 particle separator.
+3. Particle-level classification on native-generated shards using XY-invariant descriptors and compact point models.
+4. `XYInvariantParticleNet` trained with rotation-invariance and profile losses.
+5. Learned clustering, EdgeConv/GravNet/transformer variants, or object condensation only after stronger labels or simulation truth exist.

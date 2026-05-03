@@ -1,6 +1,13 @@
 # Phase 1 Reliability Hardening v001 Results
 
+Status: archived neural-network hardening run note. The current active Phase 1
+baseline is `native-grid-dbscan`; see
+[`phase1-native-grid-baseline.md`](phase1-native-grid-baseline.md).
+
 Run date: 2026-05-03.
+
+Detailed NN architecture, data structure, synthetic data, and curriculum
+training notes are in [`phase1-nn-full-report.md`](phase1-nn-full-report.md).
 
 ## Teacher and Data
 

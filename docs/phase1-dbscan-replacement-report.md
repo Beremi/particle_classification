@@ -1,5 +1,9 @@
 # Phase 1 Report: Neural Replacement for 3D DBSCAN Particle Extraction
 
+Status: archived neural-network separator report. The active Phase 1 baseline is
+now the exact, real-time `native-grid-dbscan` backend documented in
+[`phase1-native-grid-baseline.md`](phase1-native-grid-baseline.md).
+
 ## Executive Summary
 
 Phase 1 trained a hit-level graph neural network, `EdgeTrackNetTiny`, to replace the 3D DBSCAN particle extraction pass on stable pseudo-label windows. The model predicts local same-particle edges and hit objectness, then turns those probabilities into variable-size particle IDs with connected components. Energy is preserved as an input and output diagnostic, but the clustering distance and NN graph construction remain based on `(x, y, time)` geometry.

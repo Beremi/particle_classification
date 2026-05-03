@@ -5,14 +5,20 @@ import json
 import math
 import random
 import time
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
 
 import numpy as np
 
-from ..clustering import dbscan_labels
+from ..clustering import dbscan_labels, dbscan_labels_pairs
+from .fast_clustering import (
+    native_grid_dbscan_labels,
+    native_stream_grid_linker_labels,
+    numba_grid_dbscan_labels,
+    numba_stream_grid_linker_labels,
+)
 from .t3pa import count_t3pa_rows, iter_t3pa_hits
 
 
@@ -20,6 +26,9 @@ DEFAULT_TUNING_SEED = 20260502
 DEFAULT_EPS_GRID = (2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
 DEFAULT_MIN_SAMPLES_GRID = (2, 3, 4)
 DEFAULT_TIME_SCALE_GRID = (10_000_000.0, 15_000_000.0, 20_000_000.0, 30_000_000.0, 40_000_000.0)
+EXACT_DBSCAN_BACKENDS = ("ckdtree-neighborhoods", "ckdtree-pairs", "numba-grid-dbscan", "native-grid-dbscan")
+STREAM_LINKER_BACKENDS = ("stream-grid-linker", "numba-stream-grid-linker", "native-stream-grid-linker")
+CLUSTERING_BACKENDS = (*EXACT_DBSCAN_BACKENDS, *STREAM_LINKER_BACKENDS)
 
 
 @dataclass(frozen=True)
@@ -176,18 +185,93 @@ def load_t3pa_hit_arrays(
     )
 
 
-def cluster_hit_arrays(arrays: T3PAHitArrays, params: DBSCANParticleParams) -> tuple[np.ndarray, bool]:
+def cluster_hit_arrays(
+    arrays: T3PAHitArrays,
+    params: DBSCANParticleParams,
+    *,
+    backend: str = "ckdtree-neighborhoods",
+    threads: int = 0,
+) -> tuple[np.ndarray, bool]:
+    if backend not in CLUSTERING_BACKENDS:
+        raise ValueError(f"Unknown clustering backend {backend!r}; expected one of {CLUSTERING_BACKENDS}.")
+    if backend == "stream-grid-linker":
+        return stream_grid_linker_labels(arrays, params), False
+    if backend == "numba-stream-grid-linker":
+        return (
+            numba_stream_grid_linker_labels(
+                arrays.x,
+                arrays.y,
+                arrays.time / params.time_scale,
+                eps=params.eps,
+                min_samples=params.min_samples,
+                threads=threads,
+            ),
+            False,
+        )
+    if backend == "native-stream-grid-linker":
+        return (
+            native_stream_grid_linker_labels(
+                arrays.x,
+                arrays.y,
+                arrays.time / params.time_scale,
+                eps=params.eps,
+                min_samples=params.min_samples,
+                threads=threads,
+            ),
+            False,
+        )
     features = arrays.xyt_features(params)
     if arrays.n_hits <= params.full_scan_threshold:
-        return dbscan_labels(features, eps=params.eps, min_samples=params.min_samples), False
+        return dbscan_labels_backend(
+            features,
+            eps=params.eps,
+            min_samples=params.min_samples,
+            backend=backend,
+            threads=threads,
+        ), False
     labels = dbscan_labels_windowed(
         features,
         eps=params.eps,
         min_samples=params.min_samples,
         window_size=params.window_size,
         window_overlap=params.window_overlap,
+        backend=backend,
+        threads=threads,
     )
     return labels, True
+
+
+def dbscan_labels_backend(
+    features: np.ndarray,
+    *,
+    eps: float,
+    min_samples: int,
+    backend: str,
+    threads: int = 0,
+) -> np.ndarray:
+    if backend == "ckdtree-neighborhoods":
+        return dbscan_labels(features, eps=eps, min_samples=min_samples)
+    if backend == "ckdtree-pairs":
+        return dbscan_labels_pairs(features, eps=eps, min_samples=min_samples)
+    if backend == "numba-grid-dbscan":
+        return numba_grid_dbscan_labels(
+            features[:, 0],
+            features[:, 1],
+            features[:, 2],
+            eps=eps,
+            min_samples=min_samples,
+            threads=threads,
+        )
+    if backend == "native-grid-dbscan":
+        return native_grid_dbscan_labels(
+            features[:, 0],
+            features[:, 1],
+            features[:, 2],
+            eps=eps,
+            min_samples=min_samples,
+            threads=threads,
+        )
+    raise ValueError(f"Backend {backend!r} is not an exact DBSCAN backend.")
 
 
 def dbscan_labels_windowed(
@@ -197,6 +281,8 @@ def dbscan_labels_windowed(
     min_samples: int,
     window_size: int = 250_000,
     window_overlap: int = 25_000,
+    backend: str = "ckdtree-neighborhoods",
+    threads: int = 0,
 ) -> np.ndarray:
     """Run DBSCAN in overlapping time-sorted windows and merge overlap clusters."""
 
@@ -205,7 +291,7 @@ def dbscan_labels_windowed(
     if n_points == 0:
         return np.empty(0, dtype=int)
     if n_points <= window_size:
-        return dbscan_labels(features, eps=eps, min_samples=min_samples)
+        return dbscan_labels_backend(features, eps=eps, min_samples=min_samples, backend=backend, threads=threads)
 
     window_size = max(1, int(window_size))
     window_overlap = max(0, min(int(window_overlap), window_size - 1))
@@ -217,7 +303,13 @@ def dbscan_labels_windowed(
     while start < n_points:
         end = min(start + window_size, n_points)
         window_indices = order[start:end]
-        local_labels = dbscan_labels(features[window_indices], eps=eps, min_samples=min_samples)
+        local_labels = dbscan_labels_backend(
+            features[window_indices],
+            eps=eps,
+            min_samples=min_samples,
+            backend=backend,
+            threads=threads,
+        )
         for local_cluster_id in sorted(set(int(label) for label in local_labels.tolist()) - {-1}):
             temp_cluster = union.add()
             members = window_indices[local_labels == local_cluster_id]
@@ -240,6 +332,89 @@ def dbscan_labels_windowed(
         if root not in root_to_label:
             root_to_label[root] = len(root_to_label)
         labels[hit_idx] = root_to_label[root]
+    return labels
+
+
+def stream_grid_linker_labels(arrays: T3PAHitArrays, params: DBSCANParticleParams) -> np.ndarray:
+    """Prototype stream-aligned 3D trajectory linker.
+
+    This is intentionally not exact DBSCAN. It builds connected components from
+    local 3D links in a time-sorted stream and suppresses tiny components as
+    noise using `min_samples`.
+    """
+
+    n_hits = arrays.n_hits
+    if n_hits == 0:
+        return np.empty(0, dtype=int)
+    order = np.argsort(arrays.time, kind="mergesort")
+    x = arrays.x.astype(np.int16, copy=False)
+    y = arrays.y.astype(np.int16, copy=False)
+    t = arrays.time.astype(np.float64, copy=False)
+    eps = float(params.eps)
+    eps2 = eps * eps
+    time_scale = max(float(params.time_scale), 1.0)
+    time_radius = eps * time_scale
+    spatial_radius = int(math.ceil(eps))
+    parent = np.arange(n_hits, dtype=np.int64)
+    rank = np.zeros(n_hits, dtype=np.int8)
+    active_by_pixel: dict[int, deque[int]] = defaultdict(deque)
+
+    def find(idx: int) -> int:
+        root = idx
+        while parent[root] != root:
+            root = int(parent[root])
+        while parent[idx] != idx:
+            next_idx = int(parent[idx])
+            parent[idx] = root
+            idx = next_idx
+        return root
+
+    def union(a: int, b: int) -> None:
+        root_a = find(a)
+        root_b = find(b)
+        if root_a == root_b:
+            return
+        if rank[root_a] < rank[root_b]:
+            root_a, root_b = root_b, root_a
+        parent[root_b] = root_a
+        if rank[root_a] == rank[root_b]:
+            rank[root_a] += 1
+
+    for hit_idx in order.tolist():
+        hit_idx = int(hit_idx)
+        current_t = float(t[hit_idx])
+        xi = int(x[hit_idx])
+        yi = int(y[hit_idx])
+        for ny in range(max(0, yi - spatial_radius), min(255, yi + spatial_radius) + 1):
+            row_key = ny * 256
+            for nx in range(max(0, xi - spatial_radius), min(255, xi + spatial_radius) + 1):
+                bucket = active_by_pixel.get(row_key + nx)
+                if not bucket:
+                    continue
+                while bucket and current_t - float(t[bucket[0]]) > time_radius:
+                    bucket.popleft()
+                if not bucket:
+                    continue
+                for previous_idx in bucket:
+                    dt_scaled = (current_t - float(t[previous_idx])) / time_scale
+                    dx = float(xi - int(x[previous_idx]))
+                    dy = float(yi - int(y[previous_idx]))
+                    if dx * dx + dy * dy + dt_scaled * dt_scaled <= eps2:
+                        union(hit_idx, int(previous_idx))
+        active_by_pixel[yi * 256 + xi].append(hit_idx)
+
+    roots = np.fromiter((find(idx) for idx in range(n_hits)), dtype=np.int64, count=n_hits)
+    unique_roots, counts = np.unique(roots, return_counts=True)
+    keep_roots = {int(root) for root, count in zip(unique_roots.tolist(), counts.tolist(), strict=True) if count >= params.min_samples}
+    root_to_label: dict[int, int] = {}
+    labels = np.full(n_hits, -1, dtype=int)
+    for idx, root in enumerate(roots.tolist()):
+        root = int(root)
+        if root not in keep_roots:
+            continue
+        if root not in root_to_label:
+            root_to_label[root] = len(root_to_label)
+        labels[idx] = root_to_label[root]
     return labels
 
 
@@ -697,6 +872,8 @@ def build_particle_outputs(
     compress: bool = True,
     fail_fast: bool = False,
     verbose: bool = False,
+    backend: str = "ckdtree-neighborhoods",
+    threads: int = 0,
 ) -> dict[str, object]:
     root = Path(input_path)
     out_dir = Path(output_dir)
@@ -720,8 +897,14 @@ def build_particle_outputs(
             "eps": params.eps,
             "min_samples": params.min_samples,
             "time_scale": params.time_scale,
+            "backend": backend,
             "windowed": "",
             "runtime_s": "",
+            "parse_runtime_s": "",
+            "cluster_runtime_s": "",
+            "write_runtime_s": "",
+            "total_runtime_s": "",
+            "hits_per_s": "",
             "status": "pending",
             "validation_warnings": "",
         }
@@ -734,15 +917,25 @@ def build_particle_outputs(
             else:
                 if verbose:
                     print(f"[{file_idx}/{len(files)}] loading {item.relative_path} ({item.rows:,} rows)", flush=True)
+                parse_started = time.perf_counter()
                 arrays = load_t3pa_hit_arrays(item.path, row_count=item.rows)
+                parse_runtime_s = time.perf_counter() - parse_started
                 if verbose:
                     mode = "windowed" if arrays.n_hits > params.full_scan_threshold else "full"
-                    print(f"[{file_idx}/{len(files)}] clustering {item.relative_path} with {mode} DBSCAN", flush=True)
-                labels, windowed = cluster_hit_arrays(arrays, params)
+                    print(
+                        f"[{file_idx}/{len(files)}] clustering {item.relative_path} "
+                        f"with {mode} {backend}",
+                        flush=True,
+                    )
+                cluster_started = time.perf_counter()
+                labels, windowed = cluster_hit_arrays(arrays, params, backend=backend, threads=threads)
+                cluster_runtime_s = time.perf_counter() - cluster_started
                 labels = normalize_cluster_labels(labels)
                 if verbose:
                     print(f"[{file_idx}/{len(files)}] writing {output_path.as_posix()}", flush=True)
+                write_started = time.perf_counter()
                 summary = write_particle_npz(arrays, labels, output_path, params=params, compress=compress)
+                write_runtime_s = time.perf_counter() - write_started
                 quality = quality_warnings(arrays, labels, params)
                 row.update(summary)
                 row["source_path"] = item.relative_path
@@ -750,7 +943,13 @@ def build_particle_outputs(
                 row["windowed"] = bool(windowed)
                 row["validation_warnings"] = ";".join(quality)
                 row["status"] = "ok"
-                row["runtime_s"] = round(time.perf_counter() - started, 3)
+                total_runtime_s = time.perf_counter() - started
+                row["parse_runtime_s"] = round(parse_runtime_s, 3)
+                row["cluster_runtime_s"] = round(cluster_runtime_s, 3)
+                row["write_runtime_s"] = round(write_runtime_s, 3)
+                row["total_runtime_s"] = round(total_runtime_s, 3)
+                row["runtime_s"] = round(total_runtime_s, 3)
+                row["hits_per_s"] = round(arrays.n_hits / total_runtime_s, 3) if total_runtime_s > 0 else ""
         except Exception as exc:
             row["status"] = "error"
             row["validation_warnings"] = f"{type(exc).__name__}: {exc}"

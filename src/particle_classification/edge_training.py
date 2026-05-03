@@ -60,6 +60,11 @@ class EdgeTrainConfig:
 class EdgeWindowDataset(Dataset):
     def __init__(self, manifest_path: str | Path, *, split: str):
         self.rows = load_manifest_rows(manifest_path, split=split)
+        self.indices_by_curriculum_source: dict[str, list[int]] = {}
+        for idx, row in enumerate(self.rows):
+            source = row.get("curriculum_source", "")
+            if source:
+                self.indices_by_curriculum_source.setdefault(source, []).append(idx)
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -77,6 +82,8 @@ class EdgeWindowDataset(Dataset):
                 "source_particle_id": data["source_particle_id"].astype(np.int64),
                 "hit_energy": data["hit_energy"].astype(np.float32),
                 "path": row["path"],
+                "curriculum_source": row.get("curriculum_source", ""),
+                "label_source": row.get("label_source", ""),
             }
             if "edge_attr" in data.files:
                 item["edge_attr"] = data["edge_attr"].astype(np.float32)
@@ -205,6 +212,7 @@ def train_edge_tracknet(
     config: EdgeTrainConfig | None = None,
     device: str = "cpu",
     verbose: bool = False,
+    init_checkpoint: str | Path | None = None,
 ) -> dict[str, object]:
     config = config or EdgeTrainConfig()
     random.seed(config.seed)
@@ -229,6 +237,9 @@ def train_edge_tracknet(
         message_passing_steps=config.message_passing_steps,
     )
     model = EdgeTrackNetTiny(model_config).to(device)
+    init_checkpoint_path = Path(init_checkpoint) if init_checkpoint is not None else None
+    if init_checkpoint_path is not None:
+        load_initial_checkpoint(model, model_config, init_checkpoint_path, device=device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
@@ -337,6 +348,7 @@ def train_edge_tracknet(
             "model_state_dict": model.state_dict(),
             "model_config": asdict(model_config),
             "train_config": asdict(config),
+            "init_checkpoint": init_checkpoint_path.as_posix() if init_checkpoint_path is not None else "",
             "normalization": normalization_data,
             "normalization_path": normalization_path.as_posix() if normalization_path.exists() else "",
             "best_step": best_step,
@@ -350,6 +362,7 @@ def train_edge_tracknet(
     )
     summary = {
         "checkpoint": checkpoint_path.as_posix(),
+        "init_checkpoint": init_checkpoint_path.as_posix() if init_checkpoint_path is not None else "",
         "steps": last_step,
         "requested_steps": config.steps,
         "stop_reason": stop_reason,
@@ -371,10 +384,40 @@ def train_edge_tracknet(
 
 
 def random_batch(dataset: EdgeWindowDataset, batch_size: int) -> list[dict[str, np.ndarray | str]]:
+    groups = {key: value for key, value in dataset.indices_by_curriculum_source.items() if value}
+    if len(groups) >= 2 and batch_size > 1:
+        sources = sorted(groups)
+        selected_indices: list[int] = []
+        base = batch_size // len(sources)
+        remainder = batch_size % len(sources)
+        for source_idx, source in enumerate(sources):
+            draws = base + (1 if source_idx < remainder else 0)
+            selected_indices.extend(random.choice(groups[source]) for _ in range(draws))
+        random.shuffle(selected_indices)
+        return [dataset[idx] for idx in selected_indices]
     if len(dataset) <= batch_size:
         return [dataset[idx] for idx in range(len(dataset))]
     indices = random.sample(range(len(dataset)), k=batch_size)
     return [dataset[idx] for idx in indices]
+
+
+def load_initial_checkpoint(
+    model: EdgeTrackNetTiny,
+    model_config: EdgeTrackNetTinyConfig,
+    checkpoint_path: Path,
+    *,
+    device: str,
+) -> None:
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint_config = EdgeTrackNetTinyConfig(**checkpoint["model_config"])
+    expected = asdict(model_config)
+    observed = asdict(checkpoint_config)
+    if observed != expected:
+        raise ValueError(
+            "Initial checkpoint model config does not match requested training config: "
+            f"checkpoint={observed} requested={expected}"
+        )
+    model.load_state_dict(checkpoint["model_state_dict"])
 
 
 def move_batch_tensors(batch: dict[str, object], device: str) -> dict[str, object]:

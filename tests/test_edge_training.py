@@ -2,6 +2,7 @@ import csv
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from particle_classification.data.edge_training import (
@@ -115,10 +116,24 @@ def test_build_edge_training_set_and_train_smoke(tmp_path):
         tmp_path / "experiment",
         config=EdgeTrainConfig(steps=2, batch_size=1, hidden_dim=16, edge_hidden_dim=16, eval_interval=1),
     )
+    fine_tune_result = train_edge_tracknet(
+        tmp_path / "edge_dataset" / "manifest.csv",
+        tmp_path / "experiment_finetune",
+        config=EdgeTrainConfig(steps=1, batch_size=1, hidden_dim=16, edge_hidden_dim=16, eval_interval=1),
+        init_checkpoint=train_result["checkpoint"],
+    )
+    with pytest.raises(ValueError, match="Initial checkpoint model config"):
+        train_edge_tracknet(
+            tmp_path / "edge_dataset" / "manifest.csv",
+            tmp_path / "experiment_bad_init",
+            config=EdgeTrainConfig(steps=1, batch_size=1, hidden_dim=32, edge_hidden_dim=16, eval_interval=1),
+            init_checkpoint=train_result["checkpoint"],
+        )
 
     assert result["windows"] == 1
     assert Path(result["manifest"]).exists()
     assert Path(train_result["checkpoint"]).exists()
+    assert fine_tune_result["init_checkpoint"] == train_result["checkpoint"]
     assert Path(tmp_path / "experiment" / "threshold_sweep.csv").exists()
     assert "selected_edge_threshold" in train_result
     assert Path(tmp_path / "edge_dataset" / "normalization.json").exists()

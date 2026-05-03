@@ -19,6 +19,7 @@ mlruns/
 build/
 dist/
 *.egg-info/
+*.so
 
 # LaTeX generated intermediates
 *.aux

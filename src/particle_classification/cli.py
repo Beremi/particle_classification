@@ -7,10 +7,13 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from .data.candidates import build_file_level_candidate_table, write_table
+from .data.clustering_benchmark import BenchmarkConfig, benchmark_clustering_backends
+from .data.edge_curriculum import CurriculumDatasetConfig, build_edge_curriculum_set
 from .data.edge_training import EdgeDatasetConfig, build_edge_training_set
 from .data.edge_mixing import MixedEdgeDatasetConfig, build_mixed_edge_training_set
 from .data.index import index_raw_data, write_index_csv, write_index_markdown
 from .data.particles import (
+    CLUSTERING_BACKENDS,
     DBSCANParticleParams,
     build_particle_outputs,
     tune_dbscan_parameters,
@@ -115,6 +118,12 @@ def build_particles_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--no-compress", action="store_true")
+    parser.add_argument(
+        "--backend",
+        choices=CLUSTERING_BACKENDS,
+        default="ckdtree-neighborhoods",
+    )
+    parser.add_argument("--threads", type=int, default=0, help="Native/Numba clustering threads; 0 uses backend default.")
     args = parser.parse_args(argv)
 
     params = DBSCANParticleParams.from_mapping(json.loads(args.params.read_text(encoding="utf-8")))
@@ -127,6 +136,59 @@ def build_particles_main(argv: list[str] | None = None) -> None:
         skip_existing=args.skip_existing,
         compress=not args.no_compress,
         fail_fast=args.fail_fast,
+        backend=args.backend,
+        threads=args.threads,
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
+def benchmark_clustering_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Benchmark native 3D clustering backends on worst-case Timepix files.")
+    parser.add_argument("--input", type=Path, default=Path("local_data/raw"))
+    parser.add_argument("--params", type=Path, default=Path("configs/teachers/dbscan_v001.json"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/benchmarks/clustering_backends_v001"))
+    parser.add_argument("--index", type=Path, default=Path("data/raw_data_index.csv"))
+    parser.add_argument("--cases", default="largest,slowest_per_hit,max_particles")
+    parser.add_argument(
+        "--backend",
+        action="append",
+        choices=CLUSTERING_BACKENDS,
+        default=None,
+    )
+    parser.add_argument("--reference-manifest", type=Path, default=Path("local_data/processed/particles_dbscan_v001/manifest.csv"))
+    parser.add_argument("--report", type=Path, default=Path("docs/clustering-speed-report.md"))
+    parser.add_argument("--fresh-baseline", action="store_true")
+    parser.add_argument("--threads", type=int, default=0, help="Native/Numba clustering threads; 0 uses backend default.")
+    parser.add_argument("--warmup-runs", type=int, default=0)
+    parser.add_argument("--repeat-runs", type=int, default=1)
+    parser.add_argument("--toa-tick-ns", type=float, default=25.0)
+    parser.add_argument(
+        "--stream-max-hits",
+        type=int,
+        default=500_000,
+        help="Skip the experimental pure-Python stream linker above this hit count; use 0 to disable the limit.",
+    )
+    args = parser.parse_args(argv)
+
+    params = DBSCANParticleParams.from_mapping(json.loads(args.params.read_text(encoding="utf-8")))
+    result = benchmark_clustering_backends(
+        args.input,
+        params,
+        args.out,
+        config=BenchmarkConfig(
+            cases=tuple(item.strip() for item in args.cases.split(",") if item.strip()),
+            backends=tuple(args.backend or ["ckdtree-neighborhoods", "ckdtree-pairs", "stream-grid-linker"]),
+            index_csv=args.index.as_posix(),
+            reference_manifest=args.reference_manifest.as_posix(),
+            report_path=args.report.as_posix(),
+            fresh_baseline=args.fresh_baseline,
+            stream_max_hits=args.stream_max_hits if args.stream_max_hits > 0 else None,
+            threads=args.threads,
+            warmup_runs=args.warmup_runs,
+            repeat_runs=args.repeat_runs,
+            toa_tick_ns=args.toa_tick_ns,
+        ),
         verbose=True,
     )
     print(json.dumps(result, indent=2))
@@ -217,10 +279,39 @@ def build_edge_mixed_set_main(argv: list[str] | None = None) -> None:
     print(json.dumps(result, indent=2))
 
 
+def build_edge_curriculum_set_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Build a balanced Phase 1 real+hard curriculum edge dataset.")
+    parser.add_argument("--real-manifest", type=Path, required=True)
+    parser.add_argument("--mixed-manifest", type=Path, required=True)
+    parser.add_argument("--normalization", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=Path("local_data/processed/pass1_edge_curriculum_v001"))
+    parser.add_argument("--train-real-ratio", type=float, default=0.50)
+    parser.add_argument("--val-real-ratio", type=float, default=0.50)
+    parser.add_argument("--test-real-ratio", type=float, default=0.50)
+    parser.add_argument("--seed", type=int, default=20260503)
+    args = parser.parse_args(argv)
+
+    result = build_edge_curriculum_set(
+        real_manifest=args.real_manifest,
+        mixed_manifest=args.mixed_manifest,
+        normalization_path=args.normalization,
+        output_dir=args.out,
+        config=CurriculumDatasetConfig(
+            seed=args.seed,
+            train_real_ratio=args.train_real_ratio,
+            val_real_ratio=args.val_real_ratio,
+            test_real_ratio=args.test_real_ratio,
+        ),
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
 def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Train EdgeTrackNet-Tiny on pass-1 pseudo-label windows.")
     parser.add_argument("--manifest", type=Path, default=Path("local_data/processed/pass1_edge_dataset/manifest.csv"))
     parser.add_argument("--out", type=Path, default=Path("local_data/experiments/edge_tracknet_long"))
+    parser.add_argument("--init-checkpoint", type=Path, default=None)
     parser.add_argument("--steps", type=int, default=1_000)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
@@ -270,7 +361,14 @@ def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
         edge_loss=args.edge_loss,
         embedding_loss_weight=args.embedding_loss_weight,
     )
-    result = train_edge_tracknet(args.manifest, args.out, config=config, device=args.device, verbose=True)
+    result = train_edge_tracknet(
+        args.manifest,
+        args.out,
+        config=config,
+        device=args.device,
+        verbose=True,
+        init_checkpoint=args.init_checkpoint,
+    )
     print(json.dumps(result, indent=2))
 
 

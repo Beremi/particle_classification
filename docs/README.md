@@ -18,6 +18,15 @@ Use these documents when you need more detail on a specific part of the problem 
 - [raw-data-index.md](raw-data-index.md)
   - Generated inventory of the extracted raw `.t3pa` archive, with per-folder sizes, row counts, metadata notes, and largest files.
 
+- [phase1-native-grid-baseline.md](phase1-native-grid-baseline.md)
+  - Active Phase 1 separator baseline: custom C/OpenMP grid DBSCAN, full-data validation, speed results, and commands.
+
+- [clustering-speed-report.md](clustering-speed-report.md)
+  - Benchmark comparison for SciPy, Numba, native grid DBSCAN, and stream-grid linker backends.
+
+- [phase1-nn-full-report.md](phase1-nn-full-report.md)
+  - Archived neural-network separator attempt. Useful background, but not the active Phase 1 baseline.
+
 ## Relationship to the Report
 
 The LaTeX report is the main technical narrative and literature review.
