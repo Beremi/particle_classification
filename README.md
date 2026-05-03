@@ -84,6 +84,25 @@ particle-build-particles \
   --out local_data/processed/particles
 ```
 
+Build pass-1 EdgeTrackNet pseudo-label windows:
+
+```bash
+particle-build-edge-training-set \
+  --input local_data/processed/particles \
+  --params local_data/processed/dbscan_tuning/best_params.json \
+  --out local_data/processed/pass1_edge_dataset
+```
+
+Run the preliminary DBSCAN-replacement experiment:
+
+```bash
+particle-run-edge-experiment \
+  --particles local_data/processed/particles \
+  --params local_data/processed/dbscan_tuning/best_params.json \
+  --dataset-out local_data/processed/pass1_edge_dataset \
+  --experiment-out local_data/experiments/edge_tracknet_long
+```
+
 Run the minimal XY-invariance training smoke test:
 
 ```bash

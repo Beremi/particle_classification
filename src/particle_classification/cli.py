@@ -7,12 +7,14 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from .data.candidates import build_file_level_candidate_table, write_table
+from .data.edge_training import EdgeDatasetConfig, build_edge_training_set
 from .data.index import index_raw_data, write_index_csv, write_index_markdown
 from .data.particles import (
     DBSCANParticleParams,
     build_particle_outputs,
     tune_dbscan_parameters,
 )
+from .edge_training import EdgeTrainConfig, run_edge_preliminary_experiment, train_edge_tracknet
 from .training import train_baseline_from_config
 
 
@@ -124,6 +126,89 @@ def build_particles_main(argv: list[str] | None = None) -> None:
         skip_existing=args.skip_existing,
         compress=not args.no_compress,
         fail_fast=args.fail_fast,
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
+def build_edge_training_set_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Build pass-1 EdgeTrackNet DBSCAN pseudo-label windows.")
+    parser.add_argument("--input", type=Path, default=Path("local_data/processed/particles"))
+    parser.add_argument("--params", type=Path, default=Path("local_data/processed/dbscan_tuning/best_params.json"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/processed/pass1_edge_dataset"))
+    parser.add_argument("--manifest", type=Path, default=None)
+    parser.add_argument("--max-windows", type=int, default=4_000)
+    parser.add_argument("--window-size", type=int, default=2048)
+    parser.add_argument("--window-overlap", type=int, default=512)
+    parser.add_argument("--k-neighbors", type=int, default=12)
+    parser.add_argument("--radius", type=float, default=3.5)
+    parser.add_argument("--min-stability-ari", type=float, default=0.75)
+    parser.add_argument("--seed", type=int, default=20260503)
+    args = parser.parse_args(argv)
+
+    config = EdgeDatasetConfig(
+        window_size=args.window_size,
+        window_overlap=args.window_overlap,
+        k_neighbors=args.k_neighbors,
+        radius=args.radius,
+        min_stability_ari=args.min_stability_ari,
+        max_windows=args.max_windows,
+        seed=args.seed,
+    )
+    result = build_edge_training_set(
+        args.input,
+        args.out,
+        params_path=args.params,
+        manifest=args.manifest,
+        config=config,
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
+def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Train EdgeTrackNet-Tiny on pass-1 pseudo-label windows.")
+    parser.add_argument("--manifest", type=Path, default=Path("local_data/processed/pass1_edge_dataset/manifest.csv"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/experiments/edge_tracknet_long"))
+    parser.add_argument("--steps", type=int, default=1_000)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--eval-interval", type=int, default=100)
+    parser.add_argument("--max-eval-windows", type=int, default=96)
+    parser.add_argument("--device", default="cpu")
+    args = parser.parse_args(argv)
+
+    config = EdgeTrainConfig(
+        steps=args.steps,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        eval_interval=args.eval_interval,
+        max_eval_windows=args.max_eval_windows,
+    )
+    result = train_edge_tracknet(args.manifest, args.out, config=config, device=args.device, verbose=True)
+    print(json.dumps(result, indent=2))
+
+
+def run_edge_experiment_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Run E0/E1/E2 preliminary EdgeTrackNet experiments.")
+    parser.add_argument("--particles", type=Path, default=Path("local_data/processed/particles"))
+    parser.add_argument("--params", type=Path, default=Path("local_data/processed/dbscan_tuning/best_params.json"))
+    parser.add_argument("--dataset-out", type=Path, default=Path("local_data/processed/pass1_edge_dataset"))
+    parser.add_argument("--experiment-out", type=Path, default=Path("local_data/experiments/edge_tracknet_long"))
+    parser.add_argument("--max-windows", type=int, default=4_000)
+    parser.add_argument("--steps", type=int, default=1_000)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--device", default="cpu")
+    args = parser.parse_args(argv)
+
+    result = run_edge_preliminary_experiment(
+        args.particles,
+        args.params,
+        args.dataset_out,
+        args.experiment_out,
+        dataset_config=EdgeDatasetConfig(max_windows=args.max_windows),
+        train_config=EdgeTrainConfig(steps=args.steps, batch_size=args.batch_size),
+        device=args.device,
         verbose=True,
     )
     print(json.dumps(result, indent=2))
