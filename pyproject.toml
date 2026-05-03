@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=1.24",
   "pandas>=2.0",
   "PyYAML>=6.0",
+  "scipy>=1.10",
   "torch>=2.0",
 ]
 
@@ -24,6 +25,8 @@ dev = ["pytest>=7.0"]
 particle-extract-raw = "particle_classification.cli:extract_raw_main"
 particle-data-index = "particle_classification.cli:data_index_main"
 particle-build-candidates = "particle_classification.cli:build_candidates_main"
+particle-tune-dbscan = "particle_classification.cli:tune_dbscan_main"
+particle-build-particles = "particle_classification.cli:build_particles_main"
 particle-train-baseline = "particle_classification.cli:train_baseline_main"
 
 [tool.setuptools.packages.find]

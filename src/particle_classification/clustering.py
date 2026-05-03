@@ -76,7 +76,12 @@ def cluster_descriptors(
 
 
 def dbscan_labels(features: np.ndarray, *, eps: float, min_samples: int) -> np.ndarray:
-    """Small pure-NumPy DBSCAN fallback for tests and modest candidate sets."""
+    """Return DBSCAN labels for a 2D feature array.
+
+    SciPy's `cKDTree` is preferred because the particle extraction pipeline
+    clusters large `(x, y, time)` point clouds. The pure NumPy path is retained
+    as a dependency-light fallback for tiny fixtures.
+    """
 
     features = np.asarray(features, dtype=float)
     if features.ndim != 2:
@@ -87,24 +92,109 @@ def dbscan_labels(features: np.ndarray, *, eps: float, min_samples: int) -> np.n
         return labels
 
     try:
+        from scipy.spatial import cKDTree  # type: ignore
+
+        tree = cKDTree(features)
+        neighborhoods = tree.query_ball_tree(tree, eps)
+        return _dbscan_from_neighborhoods(neighborhoods, min_samples=min_samples)
+    except Exception:
+        pass
+
+    try:
         from sklearn.cluster import DBSCAN as SklearnDBSCAN  # type: ignore
 
         return SklearnDBSCAN(eps=eps, min_samples=min_samples).fit_predict(features).astype(int)
     except Exception:
         pass
 
+    return _dbscan_with_region_query(
+        n_points,
+        region_query=lambda point_idx: _region_query(features, point_idx, eps),
+        min_samples=min_samples,
+    )
+
+
+def _dbscan_with_region_query(n_points, *, region_query, min_samples: int) -> np.ndarray:
+    labels = np.full(n_points, -1, dtype=int)
     visited = np.zeros(n_points, dtype=bool)
     cluster_id = 0
     for point_idx in range(n_points):
         if visited[point_idx]:
             continue
         visited[point_idx] = True
-        neighbors = _region_query(features, point_idx, eps)
+        neighbors = region_query(point_idx)
         if neighbors.size < min_samples:
             labels[point_idx] = -1
             continue
-        _expand_cluster(features, labels, visited, point_idx, neighbors, cluster_id, eps, min_samples)
+        _expand_cluster(labels, visited, point_idx, neighbors, cluster_id, region_query, min_samples)
         cluster_id += 1
+    return labels
+
+
+def _dbscan_from_neighborhoods(neighborhoods: list[list[int]], *, min_samples: int) -> np.ndarray:
+    """DBSCAN from precomputed radius neighborhoods.
+
+    Core points form connected components. Border points inherit any adjacent
+    core component; points adjacent to no core component remain noise.
+    """
+
+    n_points = len(neighborhoods)
+    labels = np.full(n_points, -1, dtype=int)
+    if n_points == 0:
+        return labels
+
+    core = np.fromiter((len(item) >= min_samples for item in neighborhoods), dtype=bool, count=n_points)
+    if not bool(np.any(core)):
+        return labels
+
+    parent = np.arange(n_points, dtype=np.int64)
+    rank = np.zeros(n_points, dtype=np.int8)
+
+    def find(idx: int) -> int:
+        root = idx
+        while parent[root] != root:
+            root = int(parent[root])
+        while parent[idx] != idx:
+            next_idx = int(parent[idx])
+            parent[idx] = root
+            idx = next_idx
+        return root
+
+    def union(a: int, b: int) -> None:
+        root_a = find(a)
+        root_b = find(b)
+        if root_a == root_b:
+            return
+        if rank[root_a] < rank[root_b]:
+            root_a, root_b = root_b, root_a
+        parent[root_b] = root_a
+        if rank[root_a] == rank[root_b]:
+            rank[root_a] += 1
+
+    for point_idx, neighbors in enumerate(neighborhoods):
+        if not core[point_idx]:
+            continue
+        for neighbor_idx in neighbors:
+            neighbor_idx = int(neighbor_idx)
+            if neighbor_idx > point_idx and core[neighbor_idx]:
+                union(point_idx, neighbor_idx)
+
+    root_to_label: dict[int, int] = {}
+    for point_idx in range(n_points):
+        if core[point_idx]:
+            root = find(point_idx)
+            if root not in root_to_label:
+                root_to_label[root] = len(root_to_label)
+            labels[point_idx] = root_to_label[root]
+
+    for point_idx, neighbors in enumerate(neighborhoods):
+        if labels[point_idx] != -1:
+            continue
+        for neighbor_idx in neighbors:
+            neighbor_idx = int(neighbor_idx)
+            if core[neighbor_idx]:
+                labels[point_idx] = labels[neighbor_idx]
+                break
     return labels
 
 
@@ -119,27 +209,29 @@ def _candidate_features(candidate: ParticleCandidate, feature_mode: str) -> np.n
 
 
 def _expand_cluster(
-    features: np.ndarray,
     labels: np.ndarray,
     visited: np.ndarray,
     point_idx: int,
     neighbors: np.ndarray,
     cluster_id: int,
-    eps: float,
+    region_query,
     min_samples: int,
 ) -> None:
     labels[point_idx] = cluster_id
     seeds = list(int(idx) for idx in neighbors.tolist())
+    seed_seen = set(seeds)
     i = 0
     while i < len(seeds):
         neighbor_idx = seeds[i]
         if not visited[neighbor_idx]:
             visited[neighbor_idx] = True
-            next_neighbors = _region_query(features, neighbor_idx, eps)
+            next_neighbors = region_query(neighbor_idx)
             if next_neighbors.size >= min_samples:
                 for new_idx in next_neighbors.tolist():
-                    if int(new_idx) not in seeds:
-                        seeds.append(int(new_idx))
+                    new_idx = int(new_idx)
+                    if new_idx not in seed_seen:
+                        seed_seen.add(new_idx)
+                        seeds.append(new_idx)
         if labels[neighbor_idx] == -1:
             labels[neighbor_idx] = cluster_id
         i += 1

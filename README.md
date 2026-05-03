@@ -69,6 +69,21 @@ Build a lightweight raw candidate/source table:
 particle-build-candidates --input local_data/raw --out local_data/processed/candidates.parquet
 ```
 
+Tune 3D DBSCAN on a fixed stratified sample:
+
+```bash
+particle-tune-dbscan --input local_data/raw --out local_data/processed/dbscan_tuning
+```
+
+Build per-file particle NPZ shards:
+
+```bash
+particle-build-particles \
+  --input local_data/raw \
+  --params local_data/processed/dbscan_tuning/best_params.json \
+  --out local_data/processed/particles
+```
+
 Run the minimal XY-invariance training smoke test:
 
 ```bash

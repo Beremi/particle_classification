@@ -8,6 +8,11 @@ from pathlib import Path, PurePosixPath
 
 from .data.candidates import build_file_level_candidate_table, write_table
 from .data.index import index_raw_data, write_index_csv, write_index_markdown
+from .data.particles import (
+    DBSCANParticleParams,
+    build_particle_outputs,
+    tune_dbscan_parameters,
+)
 from .training import train_baseline_from_config
 
 
@@ -70,6 +75,58 @@ def build_candidates_main(argv: list[str] | None = None) -> None:
     )
     actual = write_table(df, args.out)
     print(json.dumps({"rows": len(df), "output": str(actual)}, indent=2))
+
+
+def tune_dbscan_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Tune 3D DBSCAN particle extraction parameters.")
+    parser.add_argument("--input", type=Path, default=Path("local_data/raw"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/processed/dbscan_tuning"))
+    parser.add_argument("--index", type=Path, default=Path("data/raw_data_index.csv"))
+    parser.add_argument("--seed", type=int, default=20260502)
+    parser.add_argument(
+        "--max-hits-per-file",
+        type=int,
+        default=25_000,
+        help="Use a deterministic contiguous sample for larger tuning files.",
+    )
+    args = parser.parse_args(argv)
+
+    result = tune_dbscan_parameters(
+        args.input,
+        args.out,
+        index_csv=args.index,
+        seed=args.seed,
+        max_hits_per_file=args.max_hits_per_file,
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
+def build_particles_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Build NPZ particle shards with 3D DBSCAN labels.")
+    parser.add_argument("--input", type=Path, default=Path("local_data/raw"))
+    parser.add_argument("--params", type=Path, default=Path("local_data/processed/dbscan_tuning/best_params.json"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/processed/particles"))
+    parser.add_argument("--index", type=Path, default=Path("data/raw_data_index.csv"))
+    parser.add_argument("--max-files", type=int, default=None)
+    parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument("--no-compress", action="store_true")
+    args = parser.parse_args(argv)
+
+    params = DBSCANParticleParams.from_mapping(json.loads(args.params.read_text(encoding="utf-8")))
+    result = build_particle_outputs(
+        args.input,
+        args.out,
+        params,
+        index_csv=args.index,
+        max_files=args.max_files,
+        skip_existing=args.skip_existing,
+        compress=not args.no_compress,
+        fail_fast=args.fail_fast,
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
 
 
 def train_baseline_main(argv: list[str] | None = None) -> None:
