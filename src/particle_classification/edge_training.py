@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import copy
 import json
 import random
 import time
@@ -33,11 +34,23 @@ class EdgeTrainConfig:
     hidden_dim: int = 64
     edge_hidden_dim: int = 64
     dropout: float = 0.05
+    message_passing_steps: int = 0
     object_loss_weight: float = 0.25
     eval_interval: int = 100
     max_eval_windows: int = 96
     edge_threshold: float = 0.5
     object_threshold: float = 0.5
+    lr_plateau_patience: int = 4
+    lr_plateau_factor: float = 0.5
+    min_learning_rate: float = 1e-5
+    min_steps: int = 0
+    target_ari: float = 0.75
+    target_pairwise_f1: float = 0.92
+    target_split_rate: float = 0.08
+    target_merge_rate: float = 0.08
+    target_object_accuracy: float = 0.90
+    target_energy_error: float = 0.20
+    threshold_sweep: bool = True
 
 
 class EdgeWindowDataset(Dataset):
@@ -175,12 +188,28 @@ def train_edge_tracknet(
         hidden_dim=config.hidden_dim,
         edge_hidden_dim=config.edge_hidden_dim,
         dropout=config.dropout,
+        message_passing_steps=config.message_passing_steps,
     )
     model = EdgeTrackNetTiny(model_config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="max",
+        factor=config.lr_plateau_factor,
+        patience=config.lr_plateau_patience,
+        min_lr=config.min_learning_rate,
+    )
+    eval_dataset = val_dataset if len(val_dataset) else train_dataset
+    best_score = float("-inf")
+    best_step = 0
+    best_state: dict[str, torch.Tensor] | None = None
+    best_val_metrics: dict[str, float] = {}
+    stop_reason = "max_steps"
 
     metrics_rows: list[dict[str, object]] = []
+    last_step = 0
     for step in range(1, config.steps + 1):
+        last_step = step
         items = random_batch(train_dataset, config.batch_size)
         batch = move_batch_tensors(collate_edge_windows(items), device)
         model.train()
@@ -193,29 +222,65 @@ def train_edge_tracknet(
         if step == 1 or step % config.eval_interval == 0 or step == config.steps:
             val_metrics = evaluate_edge_model(
                 model,
-                val_dataset if len(val_dataset) else train_dataset,
+                eval_dataset,
                 max_windows=config.max_eval_windows,
                 device=device,
                 edge_threshold=config.edge_threshold,
                 object_threshold=config.object_threshold,
             )
-            row = {"step": step, **loss_metrics, **{f"val_{key}": value for key, value in val_metrics.items()}}
+            score = model_selection_score(val_metrics)
+            scheduler.step(score)
+            lr = float(optimizer.param_groups[0]["lr"])
+            if score > best_score:
+                best_score = score
+                best_step = step
+                best_val_metrics = dict(val_metrics)
+                best_state = copy.deepcopy(model.state_dict())
+            row = {
+                "step": step,
+                "lr": lr,
+                **loss_metrics,
+                "val_score": score,
+                **{f"val_{key}": value for key, value in val_metrics.items()},
+            }
             metrics_rows.append(row)
             write_dict_rows(output / "metrics.csv", metrics_rows)
             if verbose:
                 print(
                     f"step {step}/{config.steps}: loss={row['loss']:.4f}, "
-                    f"val_ari={row['val_ari']:.3f}, val_pairwise_f1={row['val_pairwise_f1']:.3f}",
+                    f"val_ari={row['val_ari']:.3f}, val_pairwise_f1={row['val_pairwise_f1']:.3f}, "
+                    f"lr={lr:.2e}",
                     flush=True,
                 )
+            if step >= max(config.min_steps, 1) and is_reasonable_edge_model(val_metrics, config):
+                stop_reason = "target_reached"
+                break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+
+    selected_edge_threshold = config.edge_threshold
+    selected_object_threshold = config.object_threshold
+    threshold_summary: dict[str, object] = {"enabled": False}
+    if config.threshold_sweep and len(eval_dataset):
+        sweep = sweep_edge_thresholds(
+            model,
+            eval_dataset,
+            output / "threshold_sweep.csv",
+            max_windows=config.max_eval_windows,
+            device=device,
+        )
+        selected_edge_threshold = float(sweep["best"]["edge_threshold"])
+        selected_object_threshold = float(sweep["best"]["object_threshold"])
+        threshold_summary = sweep
 
     test_metrics = evaluate_edge_model(
         model,
         test_dataset if len(test_dataset) else val_dataset if len(val_dataset) else train_dataset,
         max_windows=config.max_eval_windows,
         device=device,
-        edge_threshold=config.edge_threshold,
-        object_threshold=config.object_threshold,
+        edge_threshold=selected_edge_threshold,
+        object_threshold=selected_object_threshold,
     )
     checkpoint_path = output / "edge_tracknet_tiny.pt"
     torch.save(
@@ -223,16 +288,30 @@ def train_edge_tracknet(
             "model_state_dict": model.state_dict(),
             "model_config": asdict(model_config),
             "train_config": asdict(config),
+            "best_step": best_step,
+            "best_val_score": best_score,
+            "best_val_metrics": best_val_metrics,
+            "selected_edge_threshold": selected_edge_threshold,
+            "selected_object_threshold": selected_object_threshold,
             "test_metrics": test_metrics,
         },
         checkpoint_path,
     )
     summary = {
         "checkpoint": checkpoint_path.as_posix(),
-        "steps": config.steps,
+        "steps": last_step,
+        "requested_steps": config.steps,
+        "stop_reason": stop_reason,
+        "best_step": best_step,
+        "best_val_score": best_score,
+        "best_val_metrics": best_val_metrics,
+        "selected_edge_threshold": selected_edge_threshold,
+        "selected_object_threshold": selected_object_threshold,
+        "target_met": is_reasonable_edge_model(test_metrics, config),
         "train_windows": len(train_dataset),
         "val_windows": len(val_dataset),
         "test_windows": len(test_dataset),
+        "threshold_sweep": threshold_summary,
         "test_metrics": test_metrics,
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
@@ -297,7 +376,15 @@ def evaluate_edge_model(
             edge_threshold=edge_threshold,
             object_threshold=object_threshold,
         )
-        rows.append(grouping_metrics(truth, pred, np.asarray(item["hit_energy"], dtype=np.float32), object_scores))
+        rows.append(
+            grouping_metrics(
+                truth,
+                pred,
+                np.asarray(item["hit_energy"], dtype=np.float32),
+                object_scores,
+                object_threshold=object_threshold,
+            )
+        )
 
     return {
         "ari": float(np.mean([row["ari"] for row in rows])),
@@ -316,13 +403,15 @@ def grouping_metrics(
     pred: np.ndarray,
     energy: np.ndarray,
     object_scores: np.ndarray,
+    *,
+    object_threshold: float = 0.5,
 ) -> dict[str, float]:
     return {
         "ari": adjusted_rand_index(truth, pred),
         "pairwise_f1": pairwise_f1(truth, pred),
         "split_rate": split_rate(truth, pred),
         "merge_rate": merge_rate(truth, pred),
-        "object_accuracy": float(np.mean((object_scores >= 0.5) == (truth >= 0))) if truth.size else 0.0,
+        "object_accuracy": float(np.mean((object_scores >= object_threshold) == (truth >= 0))) if truth.size else 0.0,
         "energy_error": energy_conservation_error(truth, pred, energy),
     }
 
@@ -381,6 +470,66 @@ def energy_conservation_error(truth: np.ndarray, pred: np.ndarray, energy: np.nd
     if truth_energy <= 1e-6:
         return 0.0 if pred_energy <= 1e-6 else 1.0
     return abs(pred_energy - truth_energy) / max(truth_energy, 1e-6)
+
+
+def model_selection_score(metrics: dict[str, float]) -> float:
+    return float(
+        metrics.get("ari", 0.0)
+        + 0.35 * metrics.get("pairwise_f1", 0.0)
+        + 0.15 * metrics.get("object_accuracy", 0.0)
+        - 0.35 * metrics.get("split_rate", 0.0)
+        - 0.35 * metrics.get("merge_rate", 0.0)
+        - 0.10 * metrics.get("energy_error", 0.0)
+    )
+
+
+def is_reasonable_edge_model(metrics: dict[str, float], config: EdgeTrainConfig) -> bool:
+    return (
+        metrics.get("ari", 0.0) >= config.target_ari
+        and metrics.get("pairwise_f1", 0.0) >= config.target_pairwise_f1
+        and metrics.get("split_rate", 1.0) <= config.target_split_rate
+        and metrics.get("merge_rate", 1.0) <= config.target_merge_rate
+        and metrics.get("object_accuracy", 0.0) >= config.target_object_accuracy
+        and metrics.get("energy_error", 1.0) <= config.target_energy_error
+    )
+
+
+def sweep_edge_thresholds(
+    model: EdgeTrackNetTiny,
+    dataset: EdgeWindowDataset,
+    csv_path: str | Path,
+    *,
+    max_windows: int,
+    device: str,
+    edge_thresholds: Iterable[float] | None = None,
+    object_thresholds: Iterable[float] | None = None,
+) -> dict[str, object]:
+    edge_thresholds = list(edge_thresholds or [0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.93, 0.95])
+    object_thresholds = list(object_thresholds or [0.20, 0.35, 0.50, 0.65, 0.80, 0.90])
+    rows: list[dict[str, object]] = []
+    best_row: dict[str, object] | None = None
+    for edge_threshold in edge_thresholds:
+        for object_threshold in object_thresholds:
+            metrics = evaluate_edge_model(
+                model,
+                dataset,
+                max_windows=max_windows,
+                device=device,
+                edge_threshold=float(edge_threshold),
+                object_threshold=float(object_threshold),
+            )
+            score = model_selection_score(metrics)
+            row = {
+                "edge_threshold": float(edge_threshold),
+                "object_threshold": float(object_threshold),
+                "score": score,
+                **metrics,
+            }
+            rows.append(row)
+            if best_row is None or score > float(best_row["score"]):
+                best_row = row
+    write_dict_rows(csv_path, rows)
+    return {"enabled": True, "rows": len(rows), "csv": Path(csv_path).as_posix(), "best": best_row or {}}
 
 
 def write_preprocessing_audit(

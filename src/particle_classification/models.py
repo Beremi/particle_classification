@@ -99,6 +99,7 @@ class EdgeTrackNetTinyConfig:
     hidden_dim: int = 64
     edge_hidden_dim: int = 64
     dropout: float = 0.05
+    message_passing_steps: int = 0
 
 
 class EdgeTrackNetTiny(nn.Module):
@@ -125,6 +126,27 @@ class EdgeTrackNetTiny(nn.Module):
             nn.LayerNorm(h),
             nn.SiLU(),
         )
+        self.message_mlps = nn.ModuleList()
+        self.update_mlps = nn.ModuleList()
+        for _ in range(config.message_passing_steps):
+            self.message_mlps.append(
+                nn.Sequential(
+                    nn.Linear(h * 3 + 3, h),
+                    nn.LayerNorm(h),
+                    nn.SiLU(),
+                    nn.Dropout(config.dropout),
+                    nn.Linear(h, h),
+                )
+            )
+            self.update_mlps.append(
+                nn.Sequential(
+                    nn.Linear(h * 2, h),
+                    nn.LayerNorm(h),
+                    nn.SiLU(),
+                    nn.Dropout(config.dropout),
+                    nn.Linear(h, h),
+                )
+            )
         self.edge_mlp = nn.Sequential(
             nn.Linear(h * 3 + 3, edge_h),
             nn.LayerNorm(edge_h),
@@ -148,11 +170,22 @@ class EdgeTrackNetTiny(nn.Module):
         h = self.hit_mlp(features)
         src = edge_index[0].long()
         dst = edge_index[1].long()
+        aux = edge_aux_features(features, src, dst) if src.numel() else None
+        if src.numel():
+            for message_mlp, update_mlp in zip(self.message_mlps, self.update_mlps, strict=True):
+                h_src = h[src]
+                h_dst = h[dst]
+                messages = message_mlp(torch.cat([h_src, h_dst, h_src - h_dst, aux], dim=-1))
+                aggregate = torch.zeros_like(h)
+                aggregate.index_add_(0, dst, messages)
+                counts = torch.zeros((h.shape[0], 1), dtype=h.dtype, device=h.device)
+                counts.index_add_(0, dst, torch.ones((dst.shape[0], 1), dtype=h.dtype, device=h.device))
+                aggregate = aggregate / torch.clamp(counts, min=1.0)
+                h = h + update_mlp(torch.cat([h, aggregate], dim=-1))
         if src.numel():
             h_src = h[src]
             h_dst = h[dst]
             delta = h_src - h_dst
-            aux = edge_aux_features(features, src, dst)
             edge_logits = self.edge_mlp(torch.cat([h_src, h_dst, delta, aux], dim=-1)).squeeze(-1)
         else:
             edge_logits = torch.empty(0, dtype=features.dtype, device=features.device)

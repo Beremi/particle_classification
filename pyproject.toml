@@ -28,8 +28,10 @@ particle-build-candidates = "particle_classification.cli:build_candidates_main"
 particle-tune-dbscan = "particle_classification.cli:tune_dbscan_main"
 particle-build-particles = "particle_classification.cli:build_particles_main"
 particle-build-edge-training-set = "particle_classification.cli:build_edge_training_set_main"
+particle-build-edge-mixed-set = "particle_classification.cli:build_edge_mixed_set_main"
 particle-train-edge-tracknet = "particle_classification.cli:train_edge_tracknet_main"
 particle-run-edge-experiment = "particle_classification.cli:run_edge_experiment_main"
+particle-run-edge-replacement-search = "particle_classification.cli:run_edge_replacement_search_main"
 particle-train-baseline = "particle_classification.cli:train_baseline_main"
 
 [tool.setuptools.packages.find]

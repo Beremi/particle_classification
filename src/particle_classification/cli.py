@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 
 from .data.candidates import build_file_level_candidate_table, write_table
 from .data.edge_training import EdgeDatasetConfig, build_edge_training_set
+from .data.edge_mixing import MixedEdgeDatasetConfig, build_mixed_edge_training_set
 from .data.index import index_raw_data, write_index_csv, write_index_markdown
 from .data.particles import (
     DBSCANParticleParams,
@@ -166,6 +167,47 @@ def build_edge_training_set_main(argv: list[str] | None = None) -> None:
     print(json.dumps(result, indent=2))
 
 
+def build_edge_mixed_set_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Build controlled shifted/mixed EdgeTrackNet windows.")
+    parser.add_argument("--input", type=Path, default=Path("local_data/processed/particles"))
+    parser.add_argument("--params", type=Path, default=Path("local_data/processed/dbscan_tuning/best_params.json"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/processed/pass1_edge_mixed_dataset"))
+    parser.add_argument("--manifest", type=Path, default=None)
+    parser.add_argument("--windows", type=int, default=4_000)
+    parser.add_argument("--synthetic-fraction", type=float, default=0.35)
+    parser.add_argument("--hard-fraction", type=float, default=0.45)
+    parser.add_argument("--max-source-shards", type=int, default=512)
+    parser.add_argument("--max-templates", type=int, default=20_000)
+    parser.add_argument("--min-particles", type=int, default=2)
+    parser.add_argument("--max-particles", type=int, default=8)
+    parser.add_argument("--k-neighbors", type=int, default=16)
+    parser.add_argument("--radius", type=float, default=4.5)
+    parser.add_argument("--seed", type=int, default=20260503)
+    args = parser.parse_args(argv)
+
+    config = MixedEdgeDatasetConfig(
+        windows=args.windows,
+        seed=args.seed,
+        synthetic_fraction=args.synthetic_fraction,
+        hard_fraction=args.hard_fraction,
+        max_source_shards=args.max_source_shards,
+        max_templates=args.max_templates,
+        min_particles=args.min_particles,
+        max_particles=args.max_particles,
+        k_neighbors=args.k_neighbors,
+        radius=args.radius,
+    )
+    result = build_mixed_edge_training_set(
+        args.input,
+        args.out,
+        params_path=args.params,
+        manifest=args.manifest,
+        config=config,
+        verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
 def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Train EdgeTrackNet-Tiny on pass-1 pseudo-label windows.")
     parser.add_argument("--manifest", type=Path, default=Path("local_data/processed/pass1_edge_dataset/manifest.csv"))
@@ -175,6 +217,21 @@ def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--eval-interval", type=int, default=100)
     parser.add_argument("--max-eval-windows", type=int, default=96)
+    parser.add_argument("--hidden-dim", type=int, default=64)
+    parser.add_argument("--edge-hidden-dim", type=int, default=64)
+    parser.add_argument("--message-passing-steps", type=int, default=0)
+    parser.add_argument("--dropout", type=float, default=0.05)
+    parser.add_argument("--min-steps", type=int, default=0)
+    parser.add_argument("--lr-plateau-patience", type=int, default=4)
+    parser.add_argument("--lr-plateau-factor", type=float, default=0.5)
+    parser.add_argument("--min-learning-rate", type=float, default=1e-5)
+    parser.add_argument("--target-ari", type=float, default=0.75)
+    parser.add_argument("--target-pairwise-f1", type=float, default=0.92)
+    parser.add_argument("--target-split-rate", type=float, default=0.08)
+    parser.add_argument("--target-merge-rate", type=float, default=0.08)
+    parser.add_argument("--target-object-accuracy", type=float, default=0.90)
+    parser.add_argument("--target-energy-error", type=float, default=0.20)
+    parser.add_argument("--no-threshold-sweep", action="store_true")
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args(argv)
 
@@ -184,6 +241,21 @@ def train_edge_tracknet_main(argv: list[str] | None = None) -> None:
         learning_rate=args.learning_rate,
         eval_interval=args.eval_interval,
         max_eval_windows=args.max_eval_windows,
+        hidden_dim=args.hidden_dim,
+        edge_hidden_dim=args.edge_hidden_dim,
+        message_passing_steps=args.message_passing_steps,
+        dropout=args.dropout,
+        min_steps=args.min_steps,
+        lr_plateau_patience=args.lr_plateau_patience,
+        lr_plateau_factor=args.lr_plateau_factor,
+        min_learning_rate=args.min_learning_rate,
+        target_ari=args.target_ari,
+        target_pairwise_f1=args.target_pairwise_f1,
+        target_split_rate=args.target_split_rate,
+        target_merge_rate=args.target_merge_rate,
+        target_object_accuracy=args.target_object_accuracy,
+        target_energy_error=args.target_energy_error,
+        threshold_sweep=not args.no_threshold_sweep,
     )
     result = train_edge_tracknet(args.manifest, args.out, config=config, device=args.device, verbose=True)
     print(json.dumps(result, indent=2))
@@ -210,6 +282,76 @@ def run_edge_experiment_main(argv: list[str] | None = None) -> None:
         train_config=EdgeTrainConfig(steps=args.steps, batch_size=args.batch_size),
         device=args.device,
         verbose=True,
+    )
+    print(json.dumps(result, indent=2))
+
+
+def run_edge_replacement_search_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Build mixed windows and train EdgeTrackNet with plateau LR until target metrics or max steps.")
+    parser.add_argument("--particles", type=Path, default=Path("local_data/processed/particles"))
+    parser.add_argument("--params", type=Path, default=Path("local_data/processed/dbscan_tuning/best_params.json"))
+    parser.add_argument("--dataset-out", type=Path, default=Path("local_data/processed/pass1_edge_mixed_dataset"))
+    parser.add_argument("--experiment-out", type=Path, default=Path("local_data/experiments/edge_tracknet_replacement_search"))
+    parser.add_argument("--windows", type=int, default=4_000)
+    parser.add_argument("--synthetic-fraction", type=float, default=0.35)
+    parser.add_argument("--hard-fraction", type=float, default=0.45)
+    parser.add_argument("--steps", type=int, default=5_000)
+    parser.add_argument("--min-steps", type=int, default=1_000)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--eval-interval", type=int, default=100)
+    parser.add_argument("--max-eval-windows", type=int, default=128)
+    parser.add_argument("--hidden-dim", type=int, default=96)
+    parser.add_argument("--edge-hidden-dim", type=int, default=96)
+    parser.add_argument("--message-passing-steps", type=int, default=2)
+    parser.add_argument("--target-ari", type=float, default=0.75)
+    parser.add_argument("--target-pairwise-f1", type=float, default=0.92)
+    parser.add_argument("--target-split-rate", type=float, default=0.08)
+    parser.add_argument("--target-merge-rate", type=float, default=0.08)
+    parser.add_argument("--target-object-accuracy", type=float, default=0.90)
+    parser.add_argument("--target-energy-error", type=float, default=0.20)
+    parser.add_argument("--device", default="cpu")
+    args = parser.parse_args(argv)
+
+    dataset = build_mixed_edge_training_set(
+        args.particles,
+        args.dataset_out,
+        params_path=args.params,
+        config=MixedEdgeDatasetConfig(
+            windows=args.windows,
+            synthetic_fraction=args.synthetic_fraction,
+            hard_fraction=args.hard_fraction,
+        ),
+        verbose=True,
+    )
+    training = train_edge_tracknet(
+        Path(dataset["manifest"]),
+        args.experiment_out,
+        config=EdgeTrainConfig(
+            steps=args.steps,
+            min_steps=args.min_steps,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            eval_interval=args.eval_interval,
+            max_eval_windows=args.max_eval_windows,
+            hidden_dim=args.hidden_dim,
+            edge_hidden_dim=args.edge_hidden_dim,
+            message_passing_steps=args.message_passing_steps,
+            target_ari=args.target_ari,
+            target_pairwise_f1=args.target_pairwise_f1,
+            target_split_rate=args.target_split_rate,
+            target_merge_rate=args.target_merge_rate,
+            target_object_accuracy=args.target_object_accuracy,
+            target_energy_error=args.target_energy_error,
+        ),
+        device=args.device,
+        verbose=True,
+    )
+    result = {"dataset": dataset, "training": training}
+    args.experiment_out.mkdir(parents=True, exist_ok=True)
+    (args.experiment_out / "replacement_search_summary.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     print(json.dumps(result, indent=2))
 

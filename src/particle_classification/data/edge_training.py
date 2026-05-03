@@ -176,6 +176,7 @@ def make_edge_window(
     *,
     params: DBSCANParticleParams,
     config: EdgeDatasetConfig,
+    stability_ari_override: float | None = None,
 ) -> dict[str, np.ndarray | float] | None:
     n_hits = int(np.asarray(window["hit_x"]).shape[0])
     if n_hits < config.min_hits:
@@ -184,7 +185,11 @@ def make_edge_window(
     labels = np.asarray(window["hit_particle_id"], dtype=np.int32)
     features = make_hit_features(window)
     xyt = scaled_xyt(window, params)
-    stability_ari = dbscan_stability_ari(xyt, labels, params)
+    stability_ari = (
+        float(stability_ari_override)
+        if stability_ari_override is not None
+        else dbscan_stability_ari(xyt, labels, params)
+    )
     if stability_ari < config.min_stability_ari:
         return None
 

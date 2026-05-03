@@ -93,6 +93,16 @@ particle-build-edge-training-set \
   --out local_data/processed/pass1_edge_dataset
 ```
 
+Build controlled shifted/mixed windows from real particle templates plus procedural particles:
+
+```bash
+particle-build-edge-mixed-set \
+  --input local_data/processed/particles \
+  --params local_data/processed/dbscan_tuning/best_params.json \
+  --out local_data/processed/pass1_edge_mixed_dataset \
+  --windows 4000
+```
+
 Run the preliminary DBSCAN-replacement experiment:
 
 ```bash
@@ -101,6 +111,20 @@ particle-run-edge-experiment \
   --params local_data/processed/dbscan_tuning/best_params.json \
   --dataset-out local_data/processed/pass1_edge_dataset \
   --experiment-out local_data/experiments/edge_tracknet_long
+```
+
+Run the longer target-seeking EdgeTrackNet replacement search with plateau LR and validation threshold sweep:
+
+```bash
+particle-run-edge-replacement-search \
+  --particles local_data/processed/particles \
+  --params local_data/processed/dbscan_tuning/best_params.json \
+  --dataset-out local_data/processed/pass1_edge_mixed_dataset \
+  --experiment-out local_data/experiments/edge_tracknet_replacement_search \
+  --windows 4000 \
+  --steps 5000 \
+  --min-steps 1000 \
+  --message-passing-steps 2
 ```
 
 Run the minimal XY-invariance training smoke test:
