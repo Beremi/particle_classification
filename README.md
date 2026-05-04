@@ -13,6 +13,7 @@ This repository is now a runnable implementation and testing ground for Timepix 
 - Active Phase 1 separator baseline: custom C/OpenMP `native-grid-dbscan`, documented in [`docs/phase1-native-grid-baseline.md`](docs/phase1-native-grid-baseline.md)
 - Full native backend validation: 711/711 files and 44,725,206/44,725,206 hits match `dbscan_v001` exactly
 - 3D clustering speed report: [`docs/clustering-speed-report.md`](docs/clustering-speed-report.md)
+- Phase 2 particle embedding/clustering report: [`docs/phase2-particle-embedding-report.md`](docs/phase2-particle-embedding-report.md)
 - Archived Phase 1 NN reports: [`docs/phase1-nn-full-report.md`](docs/phase1-nn-full-report.md), [`docs/phase1-hardening-v001-results.md`](docs/phase1-hardening-v001-results.md), and [`docs/phase1-dbscan-replacement-report.md`](docs/phase1-dbscan-replacement-report.md)
 
 ## Design Contract
@@ -112,6 +113,41 @@ particle-benchmark-clustering \
   --threads 32 \
   --repeat-runs 1 \
   --toa-tick-ns 25
+```
+
+Build the Phase 2 variable-hit particle embedding dataset from native Phase 1 shards:
+
+```bash
+particle-build-phase2-dataset \
+  --input local_data/processed/particles_native_grid_v001 \
+  --out local_data/processed/phase2_particles_v001 \
+  --params configs/teachers/dbscan_v001.json \
+  --max-points 512 \
+  --views-per-large-particle 4 \
+  --source-backend native-grid-dbscan \
+  --teacher-name dbscan_v001
+```
+
+Run the Phase 2 architecture/objective sweep and clustering evaluation:
+
+```bash
+particle-train-phase2-sweep \
+  --dataset local_data/processed/phase2_particles_v001 \
+  --out local_data/experiments/phase2_particle_sweep_v001 \
+  --budget overnight \
+  --device cuda
+
+particle-evaluate-phase2 \
+  --dataset local_data/processed/phase2_particles_v001 \
+  --experiment local_data/experiments/phase2_particle_sweep_v001 \
+  --out local_data/experiments/phase2_particle_sweep_v001/evaluation \
+  --device cuda
+
+particle-generate-phase2-report \
+  --dataset local_data/processed/phase2_particles_v001 \
+  --experiment local_data/experiments/phase2_particle_sweep_v001 \
+  --evaluation local_data/experiments/phase2_particle_sweep_v001/evaluation \
+  --out docs/phase2-particle-embedding-report.md
 ```
 
 The neural Phase 1 separator attempts are archived for now. The commands below
@@ -240,6 +276,6 @@ particle-train-baseline --config configs/baseline.yaml
 
 1. Deterministic XY-invariant descriptors from weighted PCA and energy-density profiles.
 2. `native-grid-dbscan` as the active real-time Phase 1 particle separator.
-3. Particle-level classification on native-generated shards using XY-invariant descriptors and compact point models.
-4. `XYInvariantParticleNet` trained with rotation-invariance and profile losses.
-5. Learned clustering, EdgeConv/GravNet/transformer variants, or object condensation only after stronger labels or simulation truth exist.
+3. Phase 2 particle-level embedding on native-generated shards using variable-hit point encoders and descriptor summaries.
+4. Unsupervised family discovery with HDBSCAN/k-means/GMM/DEC/VaDE, with cluster IDs named only after inspection or external truth.
+5. Supervised imitators of frozen discovered families for deployment once a useful family map is selected.
