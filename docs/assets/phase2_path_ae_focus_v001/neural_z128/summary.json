@@ -1,0 +1,26 @@
+{
+  "checkpoint": "local_data/experiments/phase2_path_ae_focus_v002_wide/runs/path_ae_z128_p128_h256/checkpoint.pt",
+  "report": "docs/phase2-path-neural-z128-reconstruction.md",
+  "split_metrics": {
+    "test": {
+      "diff_relative_l2": 0.5989577937871218,
+      "energy_path_relative_l2": 0.1467383485287428,
+      "energy_sum_relative_l1": 0.0066154697560705245,
+      "loss": 0.45474809780716896,
+      "path_relative_l2": 0.172241541557014,
+      "time_monotonic_penalty": 0.0008210364103433676
+    },
+    "val": {
+      "diff_relative_l2": 0.5980073437094688,
+      "energy_path_relative_l2": 0.14916041726246476,
+      "energy_sum_relative_l1": 0.006589369339053519,
+      "loss": 0.4610092854127288,
+      "path_relative_l2": 0.17656037118285894,
+      "time_monotonic_penalty": 0.0008753701276873471
+    }
+  },
+  "target_met_mean_lt_0_1": false,
+  "test_energy_path_relative_l2_mean": 0.14692334830760956,
+  "test_energy_path_relative_l2_median": 0.13627682626247406,
+  "test_energy_path_relative_l2_p95": 0.3524080812931061
+}

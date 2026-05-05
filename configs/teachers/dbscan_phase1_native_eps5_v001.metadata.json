@@ -1,0 +1,26 @@
+{
+  "backend": "native-grid-dbscan",
+  "created_at": "2026-05-05",
+  "description": "Final Phase 1 particle-separation baseline after correcting T3PA fine timestamp handling and visually retuning DBSCAN on crowded slices. Uses proper Timepix time ticks: hit_time = ToA - FToA / 16. Clustering distance is Euclidean in (x, y, hit_time / time_scale). Energy is preserved but excluded from distance.",
+  "label_source": "teacher_dbscan",
+  "notes": [
+    "This replaces dbscan_v001 for particle-shard generation and Phase 2 training data.",
+    "The old dbscan_v001 backend agreement remains useful for implementation validation only, but its parameters are not trusted as physical particle labels.",
+    "The eps5 aligned-time pass was reestimated over all 711 local .t3pa files into local_data/processed/particles_aligned_time_eps5_v001/.",
+    "Weighted full-data noise fraction was 0.024 over 44,725,206 hits.",
+    "The densest observed file remained faster than real time: 12.209 s runtime for 15.632 s physical duration, RT fraction 0.781.",
+    "The largest file data I05/sync__I05-W0044_r001.t3pa ran in 36.063 s for 59.789 s physical duration, RT fraction 0.603."
+  ],
+  "params": {
+    "eps": 5.0,
+    "full_scan_threshold": 250000,
+    "min_samples": 2,
+    "time_axis": "ToA - FToA / 16 in 25 ns tick units",
+    "time_scale": 0.625,
+    "time_scale_ns": 15.625,
+    "window_overlap": 25000,
+    "window_size": 250000
+  },
+  "teacher_name": "dbscan_phase1_native_eps5_v001",
+  "teacher_params_path": "configs/teachers/dbscan_phase1_native_eps5_v001.json"
+}

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from particle_classification.data.info import parse_info_file
-from particle_classification.data.t3pa import count_t3pa_rows, iter_t3pa_hits, matrix_index_to_xy
+from particle_classification.data.t3pa import count_t3pa_rows, iter_t3pa_hits, matrix_index_to_xy, toa_ftoa_to_time_ns, toa_ftoa_to_time_ticks
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -22,6 +22,12 @@ def test_iter_t3pa_hits_and_count():
     assert hits[2].y == 1
     assert hits[-1].tot == 11
     assert hits[-1].ftoa == 3
+
+
+def test_toa_ftoa_to_fine_timestamp():
+    assert toa_ftoa_to_time_ticks(100, 0) == 100.0
+    assert toa_ftoa_to_time_ticks(100, 8) == 99.5
+    assert toa_ftoa_to_time_ns(100, 16) == 2475.0
 
 
 def test_parse_info_file():

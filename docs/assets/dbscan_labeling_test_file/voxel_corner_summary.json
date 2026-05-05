@@ -1,0 +1,284 @@
+{
+  "assets": {
+    "compare3": "assets/dbscan_labeling_test_file/v001_v002_voxel_corner_comparison_3d.png",
+    "old_p1365_voxel": "assets/dbscan_labeling_test_file/old_p1365_recolored_by_voxel_corner_min2.png",
+    "voxel_all": "assets/dbscan_labeling_test_file/voxel_corner_min2_all_labels_3d.png",
+    "voxel_largest_energy": "assets/dbscan_labeling_test_file/voxel_corner_min2_largest_particle_energy_3d.png",
+    "voxel_top10": "assets/dbscan_labeling_test_file/voxel_corner_min2_top10_largest_labels_3d.png"
+  },
+  "old_largest_split_by_v002": {
+    "n_labels": 13,
+    "noise_hits": 8,
+    "top": [
+      [
+        2593,
+        22
+      ],
+      [
+        2877,
+        21
+      ],
+      [
+        3096,
+        11
+      ],
+      [
+        2734,
+        9
+      ],
+      [
+        3052,
+        8
+      ],
+      [
+        2585,
+        7
+      ],
+      [
+        2818,
+        7
+      ],
+      [
+        2903,
+        7
+      ],
+      [
+        3054,
+        7
+      ],
+      [
+        2592,
+        5
+      ],
+      [
+        2742,
+        5
+      ],
+      [
+        2927,
+        4
+      ],
+      [
+        2578,
+        3
+      ]
+    ]
+  },
+  "old_largest_split_by_voxel_corner_min2": {
+    "n_labels": 14,
+    "noise_hits": 14,
+    "top": [
+      [
+        3064,
+        21
+      ],
+      [
+        3406,
+        20
+      ],
+      [
+        3657,
+        11
+      ],
+      [
+        3232,
+        9
+      ],
+      [
+        3341,
+        7
+      ],
+      [
+        3604,
+        7
+      ],
+      [
+        3054,
+        6
+      ],
+      [
+        3438,
+        6
+      ],
+      [
+        3606,
+        6
+      ],
+      [
+        3063,
+        4
+      ],
+      [
+        3243,
+        4
+      ],
+      [
+        3465,
+        4
+      ],
+      [
+        3044,
+        3
+      ],
+      [
+        3053,
+        2
+      ]
+    ]
+  },
+  "old_largest_v001_label": 1365,
+  "source_file": "F08/tot_toa__r0000000000.t3pa",
+  "v001": {
+    "largest_fraction": 0.005725631435563559,
+    "largest_hits": 124,
+    "median_hits": 7.0,
+    "noise_fraction": 0.01934709331855751,
+    "noise_hits": 419,
+    "p95_hits": 32.0,
+    "particles": 1872,
+    "top10": [
+      [
+        1365,
+        124
+      ],
+      [
+        671,
+        120
+      ],
+      [
+        332,
+        119
+      ],
+      [
+        1271,
+        113
+      ],
+      [
+        1508,
+        91
+      ],
+      [
+        44,
+        89
+      ],
+      [
+        989,
+        79
+      ],
+      [
+        1380,
+        76
+      ],
+      [
+        956,
+        76
+      ],
+      [
+        1136,
+        72
+      ]
+    ]
+  },
+  "v002_candidate": {
+    "largest_fraction": 0.0028628157177817797,
+    "largest_hits": 62,
+    "median_hits": 5.0,
+    "noise_fraction": 0.08362192362746457,
+    "noise_hits": 1811,
+    "p95_hits": 12.0,
+    "particles": 3300,
+    "top10": [
+      [
+        2200,
+        62
+      ],
+      [
+        3191,
+        31
+      ],
+      [
+        3034,
+        28
+      ],
+      [
+        2886,
+        28
+      ],
+      [
+        2163,
+        26
+      ],
+      [
+        1766,
+        23
+      ],
+      [
+        1283,
+        22
+      ],
+      [
+        2593,
+        22
+      ],
+      [
+        2877,
+        21
+      ],
+      [
+        1769,
+        20
+      ]
+    ]
+  },
+  "voxel_corner_min2": {
+    "largest_fraction": 0.0028628157177817797,
+    "largest_hits": 62,
+    "median_hits": 4.0,
+    "noise_fraction": 0.07697280325068108,
+    "noise_hits": 1667,
+    "p95_hits": 11.0,
+    "particles": 3887,
+    "top10": [
+      [
+        2619,
+        62
+      ],
+      [
+        3764,
+        31
+      ],
+      [
+        3584,
+        27
+      ],
+      [
+        3416,
+        27
+      ],
+      [
+        2578,
+        25
+      ],
+      [
+        2105,
+        23
+      ],
+      [
+        1519,
+        21
+      ],
+      [
+        3064,
+        21
+      ],
+      [
+        2108,
+        20
+      ],
+      [
+        3552,
+        20
+      ]
+    ]
+  }
+}

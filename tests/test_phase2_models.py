@@ -30,6 +30,26 @@ def test_phase2_backbones_accept_variable_size_batches():
         assert torch.isfinite(out["z"]).all()
 
 
+def test_phase2_query_decoder_accepts_variable_size_batches():
+    batch = make_batch()
+    model = Phase2ParticleModel(
+        Phase2ModelConfig(
+            backbone="deepsets",
+            objective="ae",
+            point_dim=10,
+            summary_dim=22,
+            hidden_dim=32,
+            latent_dim=8,
+            decoder_points=12,
+            decoder_arch="query",
+        )
+    )
+    out = model(batch["points"], batch["mask"], batch["summary"])
+    assert out["z"].shape == (4, 8)
+    assert out["decoded"].shape == (4, 12, 10)
+    assert torch.isfinite(out["decoded"]).all()
+
+
 def test_phase2_objective_losses_are_finite():
     batch = make_batch()
     for objective in ["ae", "denoising_ae", "masked_ae", "contrastive", "dec", "vade"]:

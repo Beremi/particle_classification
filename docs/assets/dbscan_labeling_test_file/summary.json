@@ -1,0 +1,114 @@
+{
+  "assets": {
+    "compare": "assets/dbscan_labeling_test_file/v001_vs_v002_candidate_labels_3d.png",
+    "v001_all": "assets/dbscan_labeling_test_file/v001_all_dbscan_labels_3d.png",
+    "v001_largest_energy": "assets/dbscan_labeling_test_file/v001_largest_particle_energy_3d.png",
+    "v001_top10": "assets/dbscan_labeling_test_file/v001_top10_largest_labels_3d.png",
+    "v002_all": "assets/dbscan_labeling_test_file/v002_candidate_all_dbscan_labels_3d.png"
+  },
+  "source_file": "F08/tot_toa__r0000000000.t3pa",
+  "v001": {
+    "largest_fraction": 0.005725631435563559,
+    "largest_hits": 124,
+    "median_hits": 7.0,
+    "noise_fraction": 0.01934709331855751,
+    "noise_hits": 419,
+    "p95_hits": 32.0,
+    "p99_hits": 59.0,
+    "particles": 1872,
+    "top10": [
+      [
+        1365,
+        124
+      ],
+      [
+        671,
+        120
+      ],
+      [
+        332,
+        119
+      ],
+      [
+        1271,
+        113
+      ],
+      [
+        1508,
+        91
+      ],
+      [
+        44,
+        89
+      ],
+      [
+        989,
+        79
+      ],
+      [
+        1380,
+        76
+      ],
+      [
+        956,
+        76
+      ],
+      [
+        1136,
+        72
+      ]
+    ]
+  },
+  "v002_candidate": {
+    "largest_fraction": 0.0028628157177817797,
+    "largest_hits": 62,
+    "median_hits": 5.0,
+    "noise_fraction": 0.08362192362746457,
+    "noise_hits": 1811,
+    "p95_hits": 12.0,
+    "p99_hits": 16.009999999999764,
+    "particles": 3300,
+    "top10": [
+      [
+        2200,
+        62
+      ],
+      [
+        3191,
+        31
+      ],
+      [
+        3034,
+        28
+      ],
+      [
+        2886,
+        28
+      ],
+      [
+        2163,
+        26
+      ],
+      [
+        1766,
+        23
+      ],
+      [
+        1283,
+        22
+      ],
+      [
+        2593,
+        22
+      ],
+      [
+        2877,
+        21
+      ],
+      [
+        1769,
+        20
+      ]
+    ]
+  }
+}

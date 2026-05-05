@@ -8,6 +8,8 @@ from typing import BinaryIO, Iterable, Iterator, TextIO
 
 
 T3PA_COLUMNS = ("Index", "Matrix Index", "ToA", "ToT", "FToA", "Overflow")
+FTOA_SUBTICKS_PER_TOA = 16.0
+TOA_TICK_NS = 25.0
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,26 @@ def matrix_index_to_xy(matrix_index: int, *, width: int = 256) -> tuple[int, int
     if matrix_index < 0:
         raise ValueError(f"Matrix index must be non-negative, got {matrix_index}.")
     return matrix_index % width, matrix_index // width
+
+
+def toa_ftoa_to_time_ticks(toa: int | float, ftoa: int | float) -> float:
+    """Convert raw T3PA coarse/fine ToA to a timestamp in 25 ns ToA ticks.
+
+    ADVACAM documents the T3PA conversion as:
+
+    `Time [ns] = 25 * ToA - (25 / 16) * FToA`.
+
+    Keeping the result in ToA-tick units preserves existing code conventions:
+    `time_ticks = ToA - FToA / 16`.
+    """
+
+    return float(toa) - float(ftoa) / FTOA_SUBTICKS_PER_TOA
+
+
+def toa_ftoa_to_time_ns(toa: int | float, ftoa: int | float) -> float:
+    """Convert raw T3PA coarse/fine ToA to nanoseconds."""
+
+    return TOA_TICK_NS * toa_ftoa_to_time_ticks(toa, ftoa)
 
 
 def iter_t3pa_hits(source: str | Path | TextIO | BinaryIO) -> Iterator[T3PAHit]:

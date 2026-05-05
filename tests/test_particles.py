@@ -22,7 +22,7 @@ def test_load_t3pa_hit_arrays_preserves_time_energy_and_provenance():
     assert arrays.n_hits == 4
     assert arrays.x.tolist() == [0, 1, 0, 255]
     assert arrays.y.tolist() == [0, 0, 1, 1]
-    assert arrays.time.tolist() == [0.0, 10.0, 20.0, 30.0]
+    assert np.allclose(arrays.time, [0.0, 9.9375, 19.875, 29.8125])
     assert np.allclose(arrays.energy, np.log1p([1, 3, 7, 11]))
     assert arrays.ftoa.tolist() == [0, 1, 2, 3]
     assert arrays.source_row.tolist() == [0, 1, 2, 3]
@@ -58,8 +58,10 @@ def test_write_particle_npz_ragged_offsets_preserve_sequences(tmp_path):
         second = slice(offsets[1], offsets[2])
         assert data["hit_x"][first].tolist() == [0, 1]
         assert data["hit_y"][second].tolist() == [1]
+        assert data["hit_time"][first].tolist() == [0.0, 9.9375]
         assert data["hit_particle_id"].tolist() == [0, 0, 1, -1]
         assert data["labels_by_source_row"].tolist() == [0, 0, 1, -1]
+        assert str(data["time_formula"]) == "relative(ToA - FToA / 16)"
         assert int(data["noise_offset"]) == 3
 
 
@@ -71,6 +73,17 @@ def test_cluster_hit_arrays_uses_x_y_time_not_energy():
 
     assert not windowed
     assert len(set(labels.tolist()) - {-1}) == 1
+
+
+def test_cluster_hit_arrays_voxel_corner_backend_uses_continuity_rule():
+    arrays = load_t3pa_hit_arrays(FIXTURES / "mini.t3pa")
+    params = DBSCANParticleParams(eps=0.0, min_samples=2, time_scale=10.0)
+
+    labels, windowed = cluster_hit_arrays(arrays, params, backend="voxel-cc-corner")
+
+    assert not windowed
+    assert labels[:3].tolist() == [0, 0, 0]
+    assert labels[3] == -1
 
 
 def test_select_tuning_sample_is_fixed_seed_and_stratified(tmp_path):

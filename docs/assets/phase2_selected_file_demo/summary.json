@@ -1,0 +1,46 @@
+{
+  "checkpoint": "local_data/experiments/phase2_particle_sweep_v001_overnight/runs/17_settransformer_dec/checkpoint.pt",
+  "csv": "docs/assets/phase2_selected_file_demo/particle_embeddings_and_groups.csv",
+  "dbscan_noise_count": 419,
+  "dbscan_particle_count": 1872,
+  "dec_group_counts": {
+    "0": 185,
+    "1": 120,
+    "3": 91,
+    "4": 98,
+    "5": 64,
+    "6": 167,
+    "7": 52,
+    "8": 298,
+    "9": 142,
+    "11": 167,
+    "12": 146,
+    "13": 2,
+    "14": 340
+  },
+  "family_method": "HDBSCAN approximate_predict from validation embeddings",
+  "fraction_of_largest": 0.0034512877907407575,
+  "hdbscan_reference_clusters": 4,
+  "hdbscan_reference_embeddings": "local_data/experiments/phase2_particle_sweep_v001_overnight/runs/17_settransformer_dec/val_embeddings.npz",
+  "largest_available_file_hits": 6275049,
+  "largest_dbscan_particle_fraction": 0.005725631435563559,
+  "largest_dbscan_particle_hits": 124,
+  "median_dbscan_particle_hits": 7.0,
+  "particle_npz": "local_data/processed/particles_native_grid_v001/F08/tot_toa__r0000000000.particles.npz",
+  "phase2_family_counts": {
+    "-1": 1022,
+    "0": 45,
+    "1": 123,
+    "2": 426,
+    "3": 256
+  },
+  "plots": {
+    "dbscan_particles_3d": "docs/assets/phase2_selected_file_demo/dbscan_particles_3d.png",
+    "phase2_embedding_pca": "docs/assets/phase2_selected_file_demo/phase2_embedding_pca.png",
+    "phase2_family_groups_3d": "docs/assets/phase2_selected_file_demo/phase2_family_groups_3d.png"
+  },
+  "row_count": 21657,
+  "selected_phase2_reason": "best HDBSCAN family-discovery row in overnight report",
+  "selected_phase2_run": "17_settransformer_dec",
+  "source_path": "F08/tot_toa__r0000000000.t3pa"
+}

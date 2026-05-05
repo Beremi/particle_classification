@@ -18,6 +18,7 @@ from .data.particles import (
     build_particle_outputs,
     tune_dbscan_parameters,
 )
+from .data.quality import ContinuityAuditConfig, ParticleShardAuditConfig, audit_particle_continuity, audit_particle_shards
 from .edge_training import EdgeTrainConfig, evaluate_phase1, run_edge_preliminary_experiment, train_edge_tracknet
 from .phase2 import (
     Phase2DatasetConfig,
@@ -119,8 +120,8 @@ def tune_dbscan_main(argv: list[str] | None = None) -> None:
 def build_particles_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Build NPZ particle shards with 3D DBSCAN labels.")
     parser.add_argument("--input", type=Path, default=Path("local_data/raw"))
-    parser.add_argument("--params", type=Path, default=Path("local_data/processed/dbscan_tuning/best_params.json"))
-    parser.add_argument("--out", type=Path, default=Path("local_data/processed/particles"))
+    parser.add_argument("--params", type=Path, default=Path("configs/teachers/dbscan_phase1_native_eps5_v001.json"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/processed/particles_aligned_time_eps5_v001"))
     parser.add_argument("--index", type=Path, default=Path("data/raw_data_index.csv"))
     parser.add_argument("--max-files", type=int, default=None)
     parser.add_argument("--skip-existing", action="store_true")
@@ -129,7 +130,7 @@ def build_particles_main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--backend",
         choices=CLUSTERING_BACKENDS,
-        default="ckdtree-neighborhoods",
+        default="native-grid-dbscan",
     )
     parser.add_argument("--threads", type=int, default=0, help="Native/Numba clustering threads; 0 uses backend default.")
     args = parser.parse_args(argv)
@@ -154,7 +155,7 @@ def build_particles_main(argv: list[str] | None = None) -> None:
 def benchmark_clustering_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Benchmark native 3D clustering backends on worst-case Timepix files.")
     parser.add_argument("--input", type=Path, default=Path("local_data/raw"))
-    parser.add_argument("--params", type=Path, default=Path("configs/teachers/dbscan_v001.json"))
+    parser.add_argument("--params", type=Path, default=Path("configs/teachers/dbscan_phase1_native_eps5_v001.json"))
     parser.add_argument("--out", type=Path, default=Path("local_data/benchmarks/clustering_backends_v001"))
     parser.add_argument("--index", type=Path, default=Path("data/raw_data_index.csv"))
     parser.add_argument("--cases", default="largest,slowest_per_hit,max_particles")
@@ -164,7 +165,7 @@ def benchmark_clustering_main(argv: list[str] | None = None) -> None:
         choices=CLUSTERING_BACKENDS,
         default=None,
     )
-    parser.add_argument("--reference-manifest", type=Path, default=Path("local_data/processed/particles_dbscan_v001/manifest.csv"))
+    parser.add_argument("--reference-manifest", type=Path, default=Path("local_data/processed/particles_aligned_time_eps5_v001/manifest.csv"))
     parser.add_argument("--report", type=Path, default=Path("docs/clustering-speed-report.md"))
     parser.add_argument("--fresh-baseline", action="store_true")
     parser.add_argument("--threads", type=int, default=0, help="Native/Numba clustering threads; 0 uses backend default.")
@@ -200,6 +201,60 @@ def benchmark_clustering_main(argv: list[str] | None = None) -> None:
         verbose=True,
     )
     print(json.dumps(result, indent=2))
+
+
+def audit_particle_shards_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Audit particle NPZ shards for obvious separator-quality failures.")
+    parser.add_argument("--manifest", type=Path, default=Path("local_data/processed/particles_aligned_time_eps5_v001/manifest.csv"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/diagnostics/particle_shard_quality"))
+    parser.add_argument("--report", type=Path, default=None)
+    parser.add_argument("--max-files", type=int, default=None)
+    parser.add_argument("--largest-fraction-warn", type=float, default=0.05)
+    parser.add_argument("--file-scale-fraction-warn", type=float, default=0.50)
+    parser.add_argument("--min-rows-for-fraction-warn", type=int, default=1_000)
+    parser.add_argument("--long-span-ticks", type=float, default=50_000_000.0)
+    args = parser.parse_args(argv)
+
+    result = audit_particle_shards(
+        args.manifest,
+        args.out,
+        config=ParticleShardAuditConfig(
+            largest_fraction_warn=args.largest_fraction_warn,
+            file_scale_fraction_warn=args.file_scale_fraction_warn,
+            min_rows_for_fraction_warn=args.min_rows_for_fraction_warn,
+            long_span_ticks=args.long_span_ticks,
+            max_files=args.max_files,
+        ),
+        report_path=args.report,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def audit_particle_continuity_main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Audit particle labels for continuity in discrete 3D time-space.")
+    parser.add_argument("--manifest", type=Path, default=Path("local_data/processed/particles_aligned_time_eps5_v001/manifest.csv"))
+    parser.add_argument("--out", type=Path, default=Path("local_data/diagnostics/particle_continuity"))
+    parser.add_argument("--report", type=Path, default=None)
+    parser.add_argument("--time-bin", type=float, default=1.0)
+    parser.add_argument("--connectivity", choices=["face", "edge", "corner"], default="corner")
+    parser.add_argument("--max-particle-hits-exact", type=int, default=100_000)
+    parser.add_argument("--max-file-hits-touch-check", type=int, default=250_000)
+    parser.add_argument("--max-files", type=int, default=None)
+    args = parser.parse_args(argv)
+
+    result = audit_particle_continuity(
+        args.manifest,
+        args.out,
+        config=ContinuityAuditConfig(
+            time_bin=args.time_bin,
+            connectivity=args.connectivity,
+            max_particle_hits_exact=args.max_particle_hits_exact,
+            max_file_hits_touch_check=args.max_file_hits_touch_check,
+            max_files=args.max_files,
+        ),
+        report_path=args.report,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
 
 
 def build_edge_training_set_main(argv: list[str] | None = None) -> None:
@@ -504,10 +559,10 @@ def evaluate_phase1_main(argv: list[str] | None = None) -> None:
 
 def build_phase2_dataset_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Build variable-hit Phase 2 particle embedding dataset.")
-    parser.add_argument("--input", type=Path, default=Path("local_data/processed/particles_native_grid_v001"))
+    parser.add_argument("--input", type=Path, default=Path("local_data/processed/particles_aligned_time_eps5_v001"))
     parser.add_argument("--out", type=Path, default=Path("local_data/processed/phase2_particles_v001"))
     parser.add_argument("--manifest", type=Path, default=None)
-    parser.add_argument("--params", type=Path, default=Path("configs/teachers/dbscan_v001.json"))
+    parser.add_argument("--params", type=Path, default=Path("configs/teachers/dbscan_phase1_native_eps5_v001.json"))
     parser.add_argument("--max-points", type=int, default=512)
     parser.add_argument("--views-per-large-particle", type=int, default=4)
     parser.add_argument("--large-particle-threshold", type=int, default=512)
@@ -515,7 +570,7 @@ def build_phase2_dataset_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--max-particles", type=int, default=None)
     parser.add_argument("--seed", type=int, default=20260503)
     parser.add_argument("--source-backend", default="native-grid-dbscan")
-    parser.add_argument("--teacher-name", default="dbscan_v001")
+    parser.add_argument("--teacher-name", default="dbscan_phase1_native_eps5_v001")
     args = parser.parse_args(argv)
 
     result = build_phase2_dataset(
@@ -553,6 +608,13 @@ def train_phase2_sweep_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--min-steps", type=int, default=50)
     parser.add_argument("--patience", type=int, default=8)
     parser.add_argument("--run-limit", type=int, default=None)
+    parser.add_argument(
+        "--latent-dim",
+        type=int,
+        action="append",
+        default=None,
+        help="Latent dimension to include in the sweep; repeat the flag for multiple sizes.",
+    )
     parser.add_argument("--no-amp", action="store_true")
     args = parser.parse_args(argv)
 
@@ -570,6 +632,7 @@ def train_phase2_sweep_main(argv: list[str] | None = None) -> None:
             min_steps=args.min_steps,
             patience=args.patience,
             run_limit=args.run_limit,
+            latent_dims=tuple(args.latent_dim or [64]),
             amp=not args.no_amp,
         ),
         device=args.device,

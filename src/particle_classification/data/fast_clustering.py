@@ -46,6 +46,28 @@ def native_stream_grid_linker_labels(
     return native.stream_grid_linker_ordered(x_arr, y_arr, t_arr, order, float(eps), int(min_samples), int(threads))
 
 
+def native_voxel_connected_components_labels(
+    x: np.ndarray,
+    y: np.ndarray,
+    time_bin: np.ndarray,
+    *,
+    connectivity: str,
+    min_hits: int,
+    threads: int = 0,
+) -> np.ndarray:
+    native = _load_native()
+    x_arr, y_arr, t_arr = _prepare_voxel_inputs(x, y, time_bin)
+    connectivity_code = {"face": 1, "edge": 2, "corner": 3}[connectivity]
+    return native.voxel_connected_components(
+        x_arr,
+        y_arr,
+        t_arr,
+        connectivity_code,
+        int(max(1, min_hits)),
+        int(threads),
+    )
+
+
 def numba_grid_dbscan_labels(
     x: np.ndarray,
     y: np.ndarray,
@@ -165,6 +187,23 @@ def _prepare_grid_inputs(
         raise ValueError("Grid clustering requires detector coordinates in the 0..255 range.")
     order = np.ascontiguousarray(np.argsort(t_arr, kind="mergesort"), dtype=np.int64)
     return x_arr, y_arr, t_arr, order
+
+
+def _prepare_voxel_inputs(
+    x: np.ndarray,
+    y: np.ndarray,
+    time_bin: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    x_arr = np.ascontiguousarray(x, dtype=np.uint16)
+    y_arr = np.ascontiguousarray(y, dtype=np.uint16)
+    t_arr = np.ascontiguousarray(time_bin, dtype=np.float64)
+    if x_arr.ndim != 1 or y_arr.ndim != 1 or t_arr.ndim != 1:
+        raise ValueError("Voxel clustering inputs must be one-dimensional arrays.")
+    if x_arr.shape[0] != y_arr.shape[0] or x_arr.shape[0] != t_arr.shape[0]:
+        raise ValueError("Voxel clustering inputs must have matching lengths.")
+    if x_arr.size and (int(np.max(x_arr)) > 255 or int(np.max(y_arr)) > 255):
+        raise ValueError("Voxel clustering requires detector coordinates in the 0..255 range.")
+    return x_arr, y_arr, t_arr
 
 
 def _load_native():

@@ -1,0 +1,23 @@
+{
+  "backend": "native-grid-dbscan",
+  "created_at": "2026-05-05",
+  "description": "Candidate DBSCAN realignment after fine-time voxel settings over-fragmented trajectories. Uses proper T3PA fine timestamps: time_ticks = ToA - FToA / 16. Compared with the fine-voxel setting, time is allowed to bridge about 10 fine FToA bins per distance unit and eps is widened to reconnect visually continuous tracks.",
+  "label_source": "teacher_dbscan_candidate",
+  "notes": [
+    "Candidate only; not yet a frozen Phase 2 teacher.",
+    "Supersedes the eps=2.5 aligned-time candidate because visual inspection showed fine bins 8350464000..8350489600 were one particle but still split into 8 labels.",
+    "On crowded file 08_thu_proton_daily_batch/toa_tot__r0000007293.t3pa, the visual-one 40 us slab at fine bins 8350464000..8350489600 changes from 8 non-noise labels and 5.0% noise under eps=2.5 to 1 label and 0.0% noise.",
+    "On the same file, the earlier visual-five 40 us slab at fine bins 3846784000..3846809600 remains 5 labels, with noise reduced from 4.3% under eps=2.5 to 1.9%.",
+    "On the same full file, particle count changes from 76331 with the fine-voxel DBSCAN candidate to 11399; noise fraction changes from 0.373 to 0.007.",
+    "Needs multi-file continuity and merge-risk audit before being used for Phase 2 training data."
+  ],
+  "params": {
+    "eps": 5.0,
+    "min_samples": 2,
+    "time_axis": "ToA - FToA / 16 in 25 ns tick units",
+    "time_scale": 0.625,
+    "time_scale_ns": 15.625
+  },
+  "teacher_name": "dbscan_aligned_time_candidate",
+  "teacher_params_path": "configs/teachers/dbscan_aligned_time_candidate.json"
+}

@@ -1,0 +1,8 @@
+{
+  "eps": 5.0,
+  "full_scan_threshold": 250000,
+  "min_samples": 2,
+  "time_scale": 0.625,
+  "window_overlap": 25000,
+  "window_size": 250000
+}

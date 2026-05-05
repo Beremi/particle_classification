@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-05-04",
+  "label_source": "teacher_dbscan_candidate",
+  "notes": [
+    "Candidate only; not a frozen teacher.",
+    "Chosen from a re-audit after visual inspection showed dbscan_v001 percolation failures.",
+    "On audited small/medium cases it removes file-scale and long-time merged clusters seen in dbscan_v001.",
+    "Full dense-file validation is still required before using this as a Phase 2 training teacher."
+  ],
+  "teacher_name": "dbscan_v002_candidate",
+  "teacher_params_path": "configs/teachers/dbscan_v002_candidate.json"
+}

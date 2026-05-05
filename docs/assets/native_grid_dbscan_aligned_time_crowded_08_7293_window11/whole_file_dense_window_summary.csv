@@ -1,0 +1,2 @@
+rank,z_start,z_end,start_s,span_ns,plot_time_bin_factor,plotted_bin_ns,hits,occupied_voxels,particles,noise_fraction,image
+1,3846784000,3846809600,6.0106,40000.0,100,156.25,208,208,5,0.04326923076923077,docs/assets/native_grid_dbscan_aligned_time_crowded_08_7293_window11/whole_file_window_01_z3846784000_3846809600_cubes.png

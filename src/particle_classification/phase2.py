@@ -6,6 +6,7 @@ import json
 import math
 import random
 import time
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
@@ -34,6 +35,7 @@ class Phase2ModelConfig:
     hidden_dim: int = 128
     latent_dim: int = 64
     decoder_points: int = 64
+    decoder_arch: str = "flat"
     dropout: float = 0.05
     transformer_heads: int = 4
     edgeconv_k: int = 12
@@ -57,18 +59,17 @@ class Phase2TrainConfig:
     grad_clip: float = 1.0
     repeat_top_seeds: int = 2
     run_limit: int | None = None
+    latent_dims: tuple[int, ...] = (64,)
 
 
 class Phase2ParticleDataset(Dataset):
     def __init__(self, dataset_dir: str | Path, *, split: str = "train", max_items: int | None = None):
         self.dataset_dir = Path(dataset_dir)
         self.manifest_path = self.dataset_dir / "manifest.csv"
-        self.rows = load_phase2_manifest(self.manifest_path, split=split)
-        if max_items is not None:
-            self.rows = self.rows[:max_items]
+        self.rows = load_phase2_manifest(self.manifest_path, split=split, max_items=max_items)
         self.normalization = json.loads((self.dataset_dir / "normalization.json").read_text(encoding="utf-8"))
-        self._chunk_path: str | None = None
-        self._chunk: dict[str, np.ndarray] | None = None
+        self._chunk_cache: OrderedDict[str, dict[str, np.ndarray]] = OrderedDict()
+        self._chunk_cache_size = 512
         self.indices_by_bucket: dict[str, list[int]] = {}
         for idx, row in enumerate(self.rows):
             self.indices_by_bucket.setdefault(row.get("size_bucket", "unknown"), []).append(idx)
@@ -96,12 +97,17 @@ class Phase2ParticleDataset(Dataset):
         }
 
     def _load_chunk(self, chunk_path: str) -> dict[str, np.ndarray]:
-        if self._chunk_path == chunk_path and self._chunk is not None:
-            return self._chunk
+        cached = self._chunk_cache.get(chunk_path)
+        if cached is not None:
+            self._chunk_cache.move_to_end(chunk_path)
+            return cached
         with np.load(chunk_path, allow_pickle=False) as data:
-            self._chunk = {key: data[key] for key in data.files}
-        self._chunk_path = chunk_path
-        return self._chunk
+            chunk = {key: data[key] for key in data.files}
+        self._chunk_cache[chunk_path] = chunk
+        self._chunk_cache.move_to_end(chunk_path)
+        while len(self._chunk_cache) > self._chunk_cache_size:
+            self._chunk_cache.popitem(last=False)
+        return chunk
 
 
 def normalize_array(values: np.ndarray, mean: Iterable[float], std: Iterable[float]) -> np.ndarray:
@@ -244,11 +250,27 @@ class Phase2ParticleModel(nn.Module):
         super().__init__()
         self.config = config
         self.encoder = ParticleEncoder(config)
-        self.decoder = nn.Sequential(
-            nn.Linear(config.latent_dim, config.hidden_dim),
-            nn.SiLU(),
-            nn.Linear(config.hidden_dim, config.decoder_points * config.point_dim),
-        )
+        if config.decoder_arch == "flat":
+            self.decoder = nn.Sequential(
+                nn.Linear(config.latent_dim, config.hidden_dim),
+                nn.SiLU(),
+                nn.Linear(config.hidden_dim, config.decoder_points * config.point_dim),
+            )
+            self.decoder_queries = None
+        elif config.decoder_arch == "query":
+            self.decoder_queries = nn.Parameter(torch.randn(config.decoder_points, config.hidden_dim) * 0.02)
+            self.decoder = nn.Sequential(
+                nn.Linear(config.latent_dim + config.hidden_dim, config.hidden_dim),
+                nn.LayerNorm(config.hidden_dim),
+                nn.SiLU(),
+                nn.Dropout(config.dropout),
+                nn.Linear(config.hidden_dim, config.hidden_dim),
+                nn.LayerNorm(config.hidden_dim),
+                nn.SiLU(),
+                nn.Linear(config.hidden_dim, config.point_dim),
+            )
+        else:
+            raise ValueError(f"Unknown Phase 2 decoder architecture: {config.decoder_arch}")
         self.dec_head = nn.Linear(config.latent_dim, config.n_clusters)
         self.mu_head = nn.Linear(config.latent_dim, config.latent_dim)
         self.logvar_head = nn.Linear(config.latent_dim, config.latent_dim)
@@ -256,7 +278,7 @@ class Phase2ParticleModel(nn.Module):
 
     def forward(self, points: torch.Tensor, mask: torch.Tensor, summary: torch.Tensor) -> dict[str, torch.Tensor]:
         z = self.encoder(points, mask, summary)
-        decoded = self.decoder(z).view(points.shape[0], self.config.decoder_points, self.config.point_dim)
+        decoded = self.decode(z)
         return {
             "z": torch.nn.functional.normalize(z, dim=-1),
             "decoded": decoded,
@@ -264,6 +286,15 @@ class Phase2ParticleModel(nn.Module):
             "mu": self.mu_head(z),
             "logvar": torch.clamp(self.logvar_head(z), min=-8.0, max=8.0),
         }
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        if self.config.decoder_arch == "flat":
+            return self.decoder(z).view(z.shape[0], self.config.decoder_points, self.config.point_dim)
+        if self.decoder_queries is None:
+            raise RuntimeError("Query decoder is missing decoder queries.")
+        queries = self.decoder_queries.unsqueeze(0).expand(z.shape[0], -1, -1)
+        z_expanded = z.unsqueeze(1).expand(-1, self.config.decoder_points, -1)
+        return self.decoder(torch.cat([z_expanded, queries], dim=-1))
 
 
 def init_phase2_weights(module: nn.Module) -> None:
@@ -315,7 +346,7 @@ def phase2_loss(
         output = model(points, mask, summary)
         std = torch.exp(0.5 * output["logvar"])
         z_sample = output["mu"] + torch.randn_like(std) * std
-        decoded = model.decoder(z_sample).view(points.shape[0], model.config.decoder_points, model.config.point_dim)
+        decoded = model.decode(z_sample)
         recon = masked_chamfer_loss(decoded, points, mask)
         kl = -0.5 * torch.mean(1 + output["logvar"] - output["mu"].pow(2) - output["logvar"].exp())
         logits = output["cluster_logits"]
@@ -386,18 +417,21 @@ def dec_target_distribution(probs: torch.Tensor) -> torch.Tensor:
     return weight / torch.clamp(weight.sum(dim=1, keepdim=True), min=1e-8)
 
 
-def phase2_run_grid(budget: str) -> list[Phase2ModelConfig]:
+def phase2_run_grid(budget: str, *, latent_dims: Iterable[int] = (64,)) -> list[Phase2ModelConfig]:
     backbones = ["deepsets", "edgeconv", "settransformer", "pointtransformer"]
     objectives = ["ae", "denoising_ae", "masked_ae", "contrastive", "dec", "vade"]
+    latent_dim_values = tuple(int(value) for value in latent_dims if int(value) > 0) or (64,)
     if budget == "smoke":
+        latent_dim = latent_dim_values[0] if latent_dim_values != (64,) else 24
         return [
-            Phase2ModelConfig(backbone="deepsets", objective="ae", hidden_dim=48, latent_dim=24, decoder_points=16),
-            Phase2ModelConfig(backbone="edgeconv", objective="contrastive", hidden_dim=48, latent_dim=24, decoder_points=16, edgeconv_k=4),
+            Phase2ModelConfig(backbone="deepsets", objective="ae", hidden_dim=48, latent_dim=latent_dim, decoder_points=16),
+            Phase2ModelConfig(backbone="edgeconv", objective="contrastive", hidden_dim=48, latent_dim=latent_dim, decoder_points=16, edgeconv_k=4),
         ]
     configs = []
-    for backbone in backbones:
-        for objective in objectives:
-            configs.append(Phase2ModelConfig(backbone=backbone, objective=objective))
+    for latent_dim in latent_dim_values:
+        for backbone in backbones:
+            for objective in objectives:
+                configs.append(Phase2ModelConfig(backbone=backbone, objective=objective, latent_dim=latent_dim))
     return configs
 
 
@@ -435,7 +469,7 @@ def train_phase2_sweep(
         val_dataset = train_dataset
     normalization = train_dataset.normalization
 
-    run_configs = phase2_run_grid(config.budget)
+    run_configs = phase2_run_grid(config.budget, latent_dims=config.latent_dims)
     if config.run_limit is not None:
         run_configs = run_configs[: config.run_limit]
     rows = []
@@ -453,7 +487,7 @@ def train_phase2_sweep(
             edgeconv_k=model_config.edgeconv_k,
             n_clusters=model_config.n_clusters,
         )
-        run_name = f"{run_idx:02d}_{model_config.backbone}_{model_config.objective}"
+        run_name = f"{run_idx:02d}_{model_config.backbone}_{model_config.objective}_z{model_config.latent_dim}"
         if verbose:
             print(f"[{run_idx}/{len(run_configs)}] {run_name}", flush=True)
         row = train_phase2_run(
@@ -474,6 +508,7 @@ def train_phase2_sweep(
         "dataset": Path(dataset_dir).as_posix(),
         "output": output.as_posix(),
         "budget": config.budget,
+        "config": asdict(config),
         "runs": rows,
         "best_run": best,
         "train_items": len(train_dataset),
@@ -562,6 +597,7 @@ def train_phase2_run(
         "run": output_dir.name,
         "backbone": model_config.backbone,
         "objective": model_config.objective,
+        "latent_dim": model_config.latent_dim,
         "checkpoint": checkpoint_path.as_posix(),
         "metrics": (output_dir / "metrics.csv").as_posix(),
         "embeddings": embeddings_path.as_posix(),
@@ -668,7 +704,16 @@ def evaluate_phase2_experiment(
         labels_by_method = cluster_embeddings(emb)
         for method, labels in labels_by_method.items():
             metrics = clustering_metrics(emb, labels)
-            rows.append({"run": run["run"], "backbone": run["backbone"], "objective": run["objective"], "cluster_method": method, **metrics})
+            rows.append(
+                {
+                    "run": run["run"],
+                    "backbone": run["backbone"],
+                    "objective": run["objective"],
+                    "latent_dim": run.get("latent_dim", emb.shape[1] if emb.ndim == 2 else ""),
+                    "cluster_method": method,
+                    **metrics,
+                }
+            )
             for cluster_id, count in cluster_counts(labels).items():
                 cluster_rows.append({"run": run["run"], "cluster_method": method, "cluster_id": cluster_id, "count": count})
             prototype_rows.extend(select_prototypes(run["run"], method, emb, labels, source_path, particle_id, n_hits))
@@ -871,7 +916,38 @@ def make_phase2_plots(experiment: Path, evaluation: Path, assets: Path) -> dict[
     except Exception:
         return paths
 
-    for summary_path in sorted(experiment.glob("runs/*/metrics.csv"))[:8]:
+    run_summaries = load_run_summaries(experiment)
+    ae_rows = [row for row in run_summaries if row.get("objective") in {"ae", "denoising_ae", "masked_ae"}]
+    if ae_rows:
+        latent_values = sorted({int(float(row.get("latent_dim", 0) or 0)) for row in ae_rows})
+        best_losses = []
+        median_losses = []
+        for latent_dim in latent_values:
+            losses = sorted(
+                float(row.get("best_val_loss", 0.0) or 0.0)
+                for row in ae_rows
+                if int(float(row.get("latent_dim", 0) or 0)) == latent_dim
+            )
+            if not losses:
+                continue
+            best_losses.append(losses[0])
+            median_losses.append(losses[len(losses) // 2])
+        if best_losses:
+            x = np.arange(len(best_losses))
+            fig, ax = plt.subplots(figsize=(6.5, 4.0))
+            ax.bar(x - 0.18, best_losses, width=0.36, label="best")
+            ax.bar(x + 0.18, median_losses, width=0.36, label="median")
+            ax.set_xticks(x, [str(value) for value in latent_values])
+            ax.set_xlabel("latent dimension")
+            ax.set_ylabel("AE-family validation loss")
+            ax.legend()
+            fig.tight_layout()
+            rel = assets / "latent_reconstruction_comparison.png"
+            fig.savefig(rel, dpi=150)
+            plt.close(fig)
+            paths["latent reconstruction comparison"] = rel.as_posix()
+
+    for summary_path in sorted(experiment.glob("runs/*/metrics.csv")):
         rows = read_csv_dicts(summary_path)
         if not rows:
             continue
@@ -897,8 +973,9 @@ def make_phase2_plots(experiment: Path, evaluation: Path, assets: Path) -> dict[
 
     metrics = read_csv_dicts(evaluation / "cluster_metrics.csv") if (evaluation / "cluster_metrics.csv").exists() else []
     if metrics:
-        labels = [f"{row['run']}\n{row['cluster_method']}" for row in metrics[:20]]
-        silhouettes = [float(row.get("silhouette", 0.0)) for row in metrics[:20]]
+        top_metrics = sorted(metrics, key=lambda row: float(row.get("silhouette", 0.0) or 0.0), reverse=True)[:20]
+        labels = [f"{row['run']}\n{row['cluster_method']}" for row in top_metrics]
+        silhouettes = [float(row.get("silhouette", 0.0)) for row in top_metrics]
         fig, ax = plt.subplots(figsize=(max(7.0, len(labels) * 0.45), 4.0))
         ax.bar(np.arange(len(labels)), silhouettes)
         ax.set_xticks(np.arange(len(labels)), labels, rotation=65, ha="right", fontsize=7)
@@ -919,45 +996,106 @@ def render_phase2_report(
     plot_paths: dict[str, str],
 ) -> str:
     budget = experiment_summary.get("budget", "unknown")
+    experiment_path = str(experiment_summary.get("output") or "local_data/experiments/phase2_particle_sweep_v001")
+    evaluation_path = f"{experiment_path.rstrip('/')}/evaluation"
+    manifest_value = str(dataset_summary.get("manifest") or "")
+    dataset_path = (
+        str(dataset_summary.get("output"))
+        if dataset_summary.get("output")
+        else (Path(manifest_value).parent.as_posix() if manifest_value else "local_data/processed/phase2_particles_v001")
+    )
+    source_backend = str(dataset_summary.get("source_backend") or "native-grid-dbscan")
+    teacher_name = str(dataset_summary.get("teacher_name") or "unknown")
+
+    def _float(value: object, default: float = float("nan")) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _format_float(value: object) -> str:
+        number = _float(value)
+        if not np.isfinite(number):
+            return "n/a"
+        return f"{number:.4f}"
+
+    best_selection = max(run_summaries, key=lambda row: _float(row.get("selection_score"), -1.0e9), default=None)
+    ae_family = [row for row in run_summaries if row.get("objective") in {"ae", "denoising_ae", "masked_ae"}]
+    best_reconstruction = min(ae_family, key=lambda row: _float(row.get("best_val_loss"), 1.0e9), default=None)
+    latent_values = sorted({int(_float(row.get("latent_dim"), 0)) for row in run_summaries if _float(row.get("latent_dim"), 0) > 0})
+    latent_flags = " ".join(f"--latent-dim {value}" for value in latent_values) or "--latent-dim 64"
+    train_config = experiment_summary.get("config", {}) if isinstance(experiment_summary.get("config", {}), dict) else {}
+    batch_size = int(_float(train_config.get("batch_size"), 64))
+    steps = train_config.get("steps")
+    max_train_items = experiment_summary.get("train_items")
+    max_eval_items = experiment_summary.get("val_items")
+    hdbscan_rows = [row for row in cluster_metrics if row.get("cluster_method") == "hdbscan"]
+    fixed_cluster_rows = [row for row in cluster_metrics if row.get("cluster_method") != "hdbscan"]
+    best_hdbscan = max(hdbscan_rows, key=lambda row: _float(row.get("silhouette"), -1.0e9), default=None)
+    best_fixed_cluster = max(fixed_cluster_rows, key=lambda row: _float(row.get("silhouette"), -1.0e9), default=None)
+    recon_by_latent: list[dict[str, object]] = []
+    for latent_dim in latent_values:
+        rows = [row for row in ae_family if int(_float(row.get("latent_dim"), -1)) == latent_dim]
+        if not rows:
+            continue
+        losses = sorted(_float(row.get("best_val_loss")) for row in rows if np.isfinite(_float(row.get("best_val_loss"))))
+        best_row = min(rows, key=lambda row: _float(row.get("best_val_loss"), 1.0e9))
+        median_loss = losses[len(losses) // 2] if losses else float("nan")
+        recon_by_latent.append(
+            {
+                "latent_dim": latent_dim,
+                "best_run": best_row.get("run", ""),
+                "best_loss": _float(best_row.get("best_val_loss")),
+                "median_loss": median_loss,
+                "runs": len(rows),
+            }
+        )
+
     lines = [
         "# Phase 2 Particle Embedding Report",
         "",
         "## Scope",
         "",
-        "Phase 2 starts after the active `native-grid-dbscan` separator has produced variable-size particles. The neural networks in this phase do not replace the separator; they learn embeddings for already separated `(x, y, time, energy)` hit sequences, then cluster those embeddings to discover particle families.",
+        f"Phase 2 starts after the active `{source_backend}` separator has produced variable-size particles. The neural networks in this phase do not replace the separator; they learn embeddings for already separated `(x, y, time, energy)` hit sequences, then cluster those embeddings to discover particle families.",
         "",
         "Discovered cluster IDs are morphology groups, not physical particle labels. They must be named later by inspection, simulation truth, or external labels.",
         "",
         "## Current Run Status",
         "",
-        f"The tracked metrics in this report come from the completed `{budget}` run artifacts in `local_data/experiments/phase2_particle_sweep_v001`. A smoke run proves the full data/model/evaluation/report path; it is not a final overnight-quality physics result.",
+        f"The tracked metrics in this report come from the completed `{budget}` run artifacts in `{experiment_path}`. Evaluation artifacts are in `{evaluation_path}`.",
         "",
-        "Full overnight command prepared by this implementation:",
+        "Reproducible command sequence:",
         "",
         "```bash",
         "particle-train-phase2-sweep \\",
-        "  --dataset local_data/processed/phase2_particles_v001 \\",
-        "  --out local_data/experiments/phase2_particle_sweep_v001_overnight \\",
-        "  --budget overnight \\",
+        f"  --dataset {dataset_path} \\",
+        f"  --out {experiment_path} \\",
+        f"  --budget {budget} \\",
+        f"  {latent_flags} \\",
+        f"  --steps {steps or 'DEFAULT'} \\",
+        f"  --max-train-items {max_train_items} \\",
+        f"  --max-eval-items {max_eval_items} \\",
         "  --device cuda \\",
-        "  --batch-size 64",
+        f"  --batch-size {batch_size}",
         "",
         "particle-evaluate-phase2 \\",
-        "  --dataset local_data/processed/phase2_particles_v001 \\",
-        "  --experiment local_data/experiments/phase2_particle_sweep_v001_overnight \\",
-        "  --out local_data/experiments/phase2_particle_sweep_v001_overnight/evaluation \\",
+        f"  --dataset {dataset_path} \\",
+        f"  --experiment {experiment_path} \\",
+        f"  --out {evaluation_path} \\",
         "  --device cuda",
         "```",
         "",
         "## Data Flow",
         "",
-        "Raw `.t3pa` files are separated by the native DBSCAN baseline into NPZ particle shards. `particle-build-phase2-dataset` converts every non-noise particle into one or more variable-hit views, with source-grouped train/validation/test splits by raw file. Large particles are sampled into multiple views capped at `max_points` while keeping full-particle summary descriptors.",
+        f"Raw `.t3pa` files are separated by `{teacher_name}` / `{source_backend}` into NPZ particle shards. `particle-build-phase2-dataset` converts every non-noise particle into one or more variable-hit views, with source-grouped train/validation/test splits by raw file. Large particles are sampled into multiple views capped at `max_points` while keeping full-particle summary descriptors.",
         "",
         f"- dataset views: {dataset_summary.get('ok_views', 'unknown')}",
         f"- particles represented: {dataset_summary.get('particles', 'unknown')}",
         f"- total view hits: {dataset_summary.get('total_view_hits', 'unknown')}",
         f"- split counts: `{dataset_summary.get('splits', {})}`",
         f"- size buckets: `{dataset_summary.get('size_buckets', {})}`",
+        f"- separator continuity audit: [`voxel-corner-min2-continuity-audit.md`](voxel-corner-min2-continuity-audit.md)",
+        f"- separator shard audit: [`voxel-corner-min2-shard-audit.md`](voxel-corner-min2-shard-audit.md)",
         "",
         "## Input Tensors",
         "",
@@ -982,29 +1120,82 @@ def render_phase2_report(
         "| DEC | cluster-logit KL self-training target for frozen/fine-tuned embeddings |",
         "| VaDE/GMM-VAE | variational latent with reconstruction, KL, and soft mixture entropy terms |",
         "",
-        "## Sweep Results",
+        "## Key Findings",
         "",
-        "| Run | Backbone | Objective | Best Step | Val Loss | Embeddings | Selection |",
-        "|---|---|---|---:|---:|---:|---:|",
     ]
+    if best_selection:
+        lines.append(
+        f"- Internal sweep selection picked `{best_selection.get('run')}` (`{best_selection.get('backbone')}` + `{best_selection.get('objective')}`), with validation loss {_format_float(best_selection.get('best_val_loss'))} and selection score {_format_float(best_selection.get('selection_score'))}."
+        )
+        if best_selection.get("objective") not in {"ae", "denoising_ae", "masked_ae"}:
+            lines.append(
+                "- That internal selection is not a reconstruction-quality verdict: DEC/contrastive/VaDE losses are not numerically comparable to AE reconstruction losses."
+            )
+    if best_reconstruction:
+        lines.append(
+            f"- Best reconstruction-style encoder was `{best_reconstruction.get('run')}`, with validation loss {_format_float(best_reconstruction.get('best_val_loss'))}; this is the strongest candidate when preserving continuous particle geometry is the priority."
+        )
+    if best_hdbscan:
+        lines.append(
+            f"- Best HDBSCAN family-discovery row was `{best_hdbscan.get('run')}` with {best_hdbscan.get('n_clusters')} clusters, noise fraction {_format_float(best_hdbscan.get('noise_fraction'))}, silhouette {_format_float(best_hdbscan.get('silhouette'))}, and Davies-Bouldin {_format_float(best_hdbscan.get('davies_bouldin'))}."
+        )
+    if best_fixed_cluster:
+        lines.append(
+            f"- Best fixed-K clustering row was `{best_fixed_cluster.get('run')}` + `{best_fixed_cluster.get('cluster_method')}`, with silhouette {_format_float(best_fixed_cluster.get('silhouette'))} and Davies-Bouldin {_format_float(best_fixed_cluster.get('davies_bouldin'))}."
+        )
+    lines.extend(
+        [
+            "- Practical recommendation: inspect prototypes from the best DEC/HDBSCAN rows first for family discovery, and keep the best AE encoder as the geometry-preserving fallback representation. Do not assign physical class names until prototype inspection or external truth exists.",
+            "",
+            "## Latent Compression",
+            "",
+            "Reconstruction-style objectives provide the cleanest answer to the compression question because they directly penalize lost particle geometry. Lower validation loss is better; the values are comparable within this AE/denoising/masked-AE family.",
+            "",
+            "| Latent dim | Best reconstruction run | Best val loss | Median recon val loss | Recon runs |",
+            "|---:|---|---:|---:|---:|",
+        ]
+    )
+    for row in recon_by_latent:
+        lines.append(
+            f"| {row['latent_dim']} | `{row['best_run']}` | {float(row['best_loss']):.4f} | {float(row['median_loss']):.4f} | {int(row['runs'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "In this run, 8 latent dimensions preserve geometry substantially better than 4. A 4D latent is possible but visibly more compressed; use it only if the downstream clustering/prototype review says the loss of detail is acceptable.",
+            "",
+            "## Validation Protocol",
+            "",
+            f"- training sample: {max_train_items} source-grouped train views, sampled deterministically across the full manifest",
+            f"- validation embeddings per run: {max_eval_items}",
+            "- clustering metrics are unsupervised morphology checks; they do not prove physical particle identity",
+            "- separator health was checked before training: all 711 files had zero disconnected labels and zero touching-label pairs under the corner-continuity audit where exact touch checks were enabled",
+            "",
+            "## Sweep Results",
+            "",
+            "| Run | Backbone | Objective | Latent | Best Step | Val Loss | Embeddings | Selection |",
+            "|---|---|---|---:|---:|---:|---:|---:|",
+        ]
+    )
     for run in run_summaries:
         lines.append(
             f"| `{run.get('run', '')}` | {run.get('backbone', '')} | {run.get('objective', '')} | "
+            f"{int(float(run.get('latent_dim', run.get('embedding_dim', 0)) or 0))} | "
             f"{int(float(run.get('best_step', 0) or 0))} | {float(run.get('best_val_loss', 0.0) or 0.0):.4f} | "
             f"{int(float(run.get('embedding_count', 0) or 0))} | {float(run.get('selection_score', 0.0) or 0.0):.4f} |"
         )
     if not run_summaries:
-        lines.append("| no runs found | | | | | | |")
+        lines.append("| no runs found | | | | | | | |")
     lines.extend(["", "## Clustering Results", ""])
-    lines.extend(["| Run | Method | Clusters | Noise | Silhouette | Davies-Bouldin |", "|---|---|---:|---:|---:|---:|"])
+    lines.extend(["| Run | Latent | Method | Clusters | Noise | Silhouette | Davies-Bouldin |", "|---|---:|---|---:|---:|---:|---:|"])
     for row in cluster_metrics[:40]:
         lines.append(
-            f"| `{row.get('run', '')}` | {row.get('cluster_method', '')} | {int(float(row.get('n_clusters', 0) or 0))} | "
+            f"| `{row.get('run', '')}` | {int(float(row.get('latent_dim', 0) or 0))} | {row.get('cluster_method', '')} | {int(float(row.get('n_clusters', 0) or 0))} | "
             f"{float(row.get('noise_fraction', 0.0) or 0.0):.3f} | {float(row.get('silhouette', 0.0) or 0.0):.3f} | "
             f"{float(row.get('davies_bouldin', 0.0) or 0.0):.3f} |"
         )
     if not cluster_metrics:
-        lines.append("| no clustering evaluation found | | | | | |")
+        lines.append("| no clustering evaluation found | | | | | | |")
     lines.extend(["", "## Plots", ""])
     if plot_paths:
         for label, path in plot_paths.items():

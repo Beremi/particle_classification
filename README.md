@@ -10,8 +10,8 @@ This repository is now a runnable implementation and testing ground for Timepix 
 - Legacy visualization package kept importable as [`src/particle_viz`](src/particle_viz)
 - Updated English report: [`particle_nn_report_updated/particle_nn_report.tex`](particle_nn_report_updated/particle_nn_report.tex)
 - First NN baseline: compact PointNet/DeepSets-style `XYInvariantParticleNet`
-- Active Phase 1 separator baseline: custom C/OpenMP `native-grid-dbscan`, documented in [`docs/phase1-native-grid-baseline.md`](docs/phase1-native-grid-baseline.md)
-- Full native backend validation: 711/711 files and 44,725,206/44,725,206 hits match `dbscan_v001` exactly
+- Final Phase 1 separator baseline: custom C/OpenMP `native-grid-dbscan` with corrected fine time and `configs/teachers/dbscan_phase1_native_eps5_v001.json`, documented in [`docs/phase1-native-grid-baseline.md`](docs/phase1-native-grid-baseline.md)
+- Important DBSCAN audit: old `dbscan_v001` labels match the native backend exactly, but are not trusted particle labels because quality checks found file-scale merged components; see [`docs/dbscan-teacher-audit.md`](docs/dbscan-teacher-audit.md)
 - 3D clustering speed report: [`docs/clustering-speed-report.md`](docs/clustering-speed-report.md)
 - Phase 2 particle embedding/clustering report: [`docs/phase2-particle-embedding-report.md`](docs/phase2-particle-embedding-report.md)
 - Archived Phase 1 NN reports: [`docs/phase1-nn-full-report.md`](docs/phase1-nn-full-report.md), [`docs/phase1-hardening-v001-results.md`](docs/phase1-hardening-v001-results.md), and [`docs/phase1-dbscan-replacement-report.md`](docs/phase1-dbscan-replacement-report.md)
@@ -34,7 +34,7 @@ Do not cluster or classify on a descriptor that includes `theta_xy`.
 .
 ├── configs/
 │   ├── baseline.yaml
-│   └── teachers/dbscan_v001.json
+│   └── teachers/
 ├── data/
 │   ├── matrix_dump_0001.txt
 │   └── raw_data_index.csv
@@ -91,8 +91,8 @@ Build per-file particle NPZ shards with the active Phase 1 baseline:
 particle-build-particles \
   --input local_data/raw \
   --index data/raw_data_index.csv \
-  --params configs/teachers/dbscan_v001.json \
-  --out local_data/processed/particles_native_grid_v001 \
+  --params configs/teachers/dbscan_phase1_native_eps5_v001.json \
+  --out local_data/processed/particles_aligned_time_eps5_v001 \
   --backend native-grid-dbscan \
   --threads 32
 ```
@@ -102,7 +102,7 @@ Benchmark exact and experimental 3D clustering backends:
 ```bash
 particle-benchmark-clustering \
   --input local_data/raw \
-  --params configs/teachers/dbscan_v001.json \
+  --params configs/teachers/dbscan_phase1_native_eps5_v001.json \
   --out local_data/benchmarks/clustering_native_v001 \
   --cases largest,slowest_per_hit,max_particles \
   --backend ckdtree-pairs \
@@ -119,13 +119,13 @@ Build the Phase 2 variable-hit particle embedding dataset from native Phase 1 sh
 
 ```bash
 particle-build-phase2-dataset \
-  --input local_data/processed/particles_native_grid_v001 \
+  --input local_data/processed/particles_aligned_time_eps5_v001 \
   --out local_data/processed/phase2_particles_v001 \
-  --params configs/teachers/dbscan_v001.json \
+  --params configs/teachers/dbscan_phase1_native_eps5_v001.json \
   --max-points 512 \
   --views-per-large-particle 4 \
   --source-backend native-grid-dbscan \
-  --teacher-name dbscan_v001
+  --teacher-name dbscan_phase1_native_eps5_v001
 ```
 
 Run the Phase 2 architecture/objective sweep and clustering evaluation:

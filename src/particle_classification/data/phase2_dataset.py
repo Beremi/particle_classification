@@ -135,8 +135,12 @@ def build_phase2_dataset(
         {
             "schema_version": PHASE2_SCHEMA_VERSION,
             "input": Path(input_path).as_posix(),
+            "output": output.as_posix(),
             "manifest": manifest_path.as_posix(),
             "normalization": normalization_path,
+            "source_backend": config.source_backend,
+            "teacher_name": config.teacher_name,
+            "label_source": config.label_source,
             **counts,
         }
     )
@@ -563,11 +567,32 @@ def summarize_phase2_rows(rows: Iterable[dict[str, object]]) -> dict[str, object
     }
 
 
-def load_phase2_manifest(manifest_path: str | Path, *, split: str | None = None) -> list[dict[str, str]]:
+def load_phase2_manifest(
+    manifest_path: str | Path,
+    *,
+    split: str | None = None,
+    max_items: int | None = None,
+    sample_seed: int = 20260503,
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    rng = random.Random(f"{sample_seed}:{Path(manifest_path).as_posix()}:{split}:{max_items}")
+    seen = 0
     with Path(manifest_path).open("r", encoding="utf-8", newline="") as handle:
-        rows = [row for row in csv.DictReader(handle) if row.get("status") == "ok"]
-    if split is not None:
-        rows = [row for row in rows if row.get("split") == split]
+        for row in csv.DictReader(handle):
+            if row.get("status") != "ok":
+                continue
+            if split is not None and row.get("split") != split:
+                continue
+            if max_items is None:
+                rows.append(row)
+                continue
+            seen += 1
+            if len(rows) < max_items:
+                rows.append(row)
+                continue
+            replace_idx = rng.randrange(seen)
+            if replace_idx < max_items:
+                rows[replace_idx] = row
     return rows
 
 

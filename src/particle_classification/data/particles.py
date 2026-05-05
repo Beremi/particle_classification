@@ -14,12 +14,15 @@ import numpy as np
 
 from ..clustering import dbscan_labels, dbscan_labels_pairs
 from .fast_clustering import (
+    BackendUnavailable,
     native_grid_dbscan_labels,
     native_stream_grid_linker_labels,
+    native_voxel_connected_components_labels,
     numba_grid_dbscan_labels,
     numba_stream_grid_linker_labels,
 )
-from .t3pa import count_t3pa_rows, iter_t3pa_hits
+from .quality import voxel_connected_components_labels
+from .t3pa import FTOA_SUBTICKS_PER_TOA, TOA_TICK_NS, count_t3pa_rows, iter_t3pa_hits
 
 
 DEFAULT_TUNING_SEED = 20260502
@@ -28,7 +31,8 @@ DEFAULT_MIN_SAMPLES_GRID = (2, 3, 4)
 DEFAULT_TIME_SCALE_GRID = (10_000_000.0, 15_000_000.0, 20_000_000.0, 30_000_000.0, 40_000_000.0)
 EXACT_DBSCAN_BACKENDS = ("ckdtree-neighborhoods", "ckdtree-pairs", "numba-grid-dbscan", "native-grid-dbscan")
 STREAM_LINKER_BACKENDS = ("stream-grid-linker", "numba-stream-grid-linker", "native-stream-grid-linker")
-CLUSTERING_BACKENDS = (*EXACT_DBSCAN_BACKENDS, *STREAM_LINKER_BACKENDS)
+VOXEL_CC_BACKENDS = ("voxel-cc-face", "voxel-cc-edge", "voxel-cc-corner")
+CLUSTERING_BACKENDS = (*EXACT_DBSCAN_BACKENDS, *STREAM_LINKER_BACKENDS, *VOXEL_CC_BACKENDS)
 
 
 @dataclass(frozen=True)
@@ -163,7 +167,8 @@ def load_t3pa_hit_arrays(
         source_row = source_row[:filled]
 
     if filled:
-        relative_time = (toa.astype(np.float64) - float(np.min(toa))).astype(np.float64)
+        fine_time = toa.astype(np.float64) - ftoa.astype(np.float64) / FTOA_SUBTICKS_PER_TOA
+        relative_time = (fine_time - float(np.min(fine_time))).astype(np.float64)
         energy = np.log1p(np.maximum(tot, 0)).astype(np.float32)
     else:
         relative_time = np.empty(0, dtype=np.float64)
@@ -194,6 +199,8 @@ def cluster_hit_arrays(
 ) -> tuple[np.ndarray, bool]:
     if backend not in CLUSTERING_BACKENDS:
         raise ValueError(f"Unknown clustering backend {backend!r}; expected one of {CLUSTERING_BACKENDS}.")
+    if backend in VOXEL_CC_BACKENDS:
+        return voxel_cc_labels_backend(arrays, params, backend=backend, threads=threads), False
     if backend == "stream-grid-linker":
         return stream_grid_linker_labels(arrays, params), False
     if backend == "numba-stream-grid-linker":
@@ -239,6 +246,42 @@ def cluster_hit_arrays(
         threads=threads,
     )
     return labels, True
+
+
+def voxel_cc_labels_backend(
+    arrays: T3PAHitArrays,
+    params: DBSCANParticleParams,
+    *,
+    backend: str,
+    threads: int = 0,
+) -> np.ndarray:
+    """Connected components under detector-grid continuity.
+
+    For these backends, `params.time_scale` is the time-bin width and
+    `params.min_samples` is the minimum component size kept as a particle.
+    `eps` is ignored so the config can name the continuity rule explicitly.
+    """
+
+    connectivity = backend.removeprefix("voxel-cc-")
+    time_bin = max(float(params.time_scale), 1e-12)
+    try:
+        return native_voxel_connected_components_labels(
+            arrays.x,
+            arrays.y,
+            arrays.time.astype(np.float64, copy=False) / time_bin,
+            connectivity=connectivity,
+            min_hits=params.min_samples,
+            threads=threads,
+        )
+    except BackendUnavailable:
+        return voxel_connected_components_labels(
+            arrays.x,
+            arrays.y,
+            arrays.time,
+            time_bin=time_bin,
+            connectivity=connectivity,
+            min_hits=params.min_samples,
+        )
 
 
 def dbscan_labels_backend(
@@ -310,15 +353,25 @@ def dbscan_labels_windowed(
             backend=backend,
             threads=threads,
         )
-        for local_cluster_id in sorted(set(int(label) for label in local_labels.tolist()) - {-1}):
-            temp_cluster = union.add()
-            members = window_indices[local_labels == local_cluster_id]
-            for hit_idx in members:
-                previous = int(assigned[hit_idx])
-                if previous == -1:
-                    assigned[hit_idx] = temp_cluster
-                else:
-                    union.union(previous, temp_cluster)
+        valid = local_labels >= 0
+        if bool(np.any(valid)):
+            local_ids = local_labels[valid]
+            members_by_label = window_indices[valid]
+            label_order = np.argsort(local_ids, kind="mergesort")
+            sorted_ids = local_ids[label_order]
+            sorted_members = members_by_label[label_order]
+            starts = np.r_[0, np.flatnonzero(np.diff(sorted_ids)) + 1]
+            ends = np.r_[starts[1:], sorted_ids.size]
+            for start_idx, end_idx in zip(starts.tolist(), ends.tolist(), strict=True):
+                temp_cluster = union.add()
+                members = sorted_members[start_idx:end_idx]
+                for hit_idx in members.tolist():
+                    hit_idx = int(hit_idx)
+                    previous = int(assigned[hit_idx])
+                    if previous == -1:
+                        assigned[hit_idx] = temp_cluster
+                    else:
+                        union.union(previous, temp_cluster)
         if end == n_points:
             break
         start = max(end - window_overlap, start + 1)
@@ -451,8 +504,21 @@ class UnionFind:
 def normalize_cluster_labels(labels: np.ndarray) -> np.ndarray:
     labels = np.asarray(labels, dtype=int)
     out = np.full(labels.shape, -1, dtype=np.int32)
-    for new_id, old_id in enumerate(sorted(set(int(label) for label in labels.tolist()) - {-1})):
-        out[labels == old_id] = new_id
+    valid = labels >= 0
+    if not bool(np.any(valid)):
+        return out
+    old_ids = np.unique(labels[valid])
+    if old_ids.size and int(old_ids[0]) == 0 and int(old_ids[-1]) == old_ids.size - 1:
+        out[valid] = labels[valid].astype(np.int32, copy=False)
+        return out
+    max_id = int(old_ids[-1])
+    if max_id <= 20_000_000:
+        lookup = np.full(max_id + 1, -1, dtype=np.int32)
+        lookup[old_ids.astype(np.int64, copy=False)] = np.arange(old_ids.size, dtype=np.int32)
+        out[valid] = lookup[labels[valid]]
+        return out
+    remapped = np.searchsorted(old_ids, labels[valid]).astype(np.int32, copy=False)
+    out[valid] = remapped
     return out
 
 
@@ -468,42 +534,50 @@ def write_particle_npz(
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    particle_ids = np.asarray(sorted(set(int(label) for label in labels.tolist()) - {-1}), dtype=np.int32)
-    ordered_chunks = [np.flatnonzero(labels == particle_id) for particle_id in particle_ids.tolist()]
     noise_indices = np.flatnonzero(labels == -1)
-    if ordered_chunks:
-        ordered = np.concatenate([*ordered_chunks, noise_indices]).astype(np.int64, copy=False)
+    valid_indices = np.flatnonzero(labels >= 0)
+    if valid_indices.size:
+        valid_order = np.argsort(labels[valid_indices], kind="stable")
+        ordered_particles = valid_indices[valid_order].astype(np.int64, copy=False)
+        sorted_particle_labels = labels[ordered_particles].astype(np.int32, copy=False)
+        particle_ids, particle_starts, particle_n_hits = np.unique(
+            sorted_particle_labels,
+            return_index=True,
+            return_counts=True,
+        )
+        particle_ids = particle_ids.astype(np.int32, copy=False)
+        particle_n_hits = particle_n_hits.astype(np.int32, copy=False)
+        ordered = np.concatenate([ordered_particles, noise_indices.astype(np.int64, copy=False)]).astype(np.int64, copy=False)
     else:
+        ordered_particles = np.empty(0, dtype=np.int64)
+        sorted_particle_labels = np.empty(0, dtype=np.int32)
+        particle_ids = np.empty(0, dtype=np.int32)
+        particle_starts = np.empty(0, dtype=np.int64)
+        particle_n_hits = np.empty(0, dtype=np.int32)
         ordered = noise_indices.astype(np.int64, copy=False)
 
     offsets = np.zeros(len(particle_ids) + 1, dtype=np.int64)
-    cursor = 0
-    for idx, chunk in enumerate(ordered_chunks, start=1):
-        cursor += int(chunk.shape[0])
-        offsets[idx] = cursor
+    if particle_n_hits.size:
+        offsets[1:] = np.cumsum(particle_n_hits, dtype=np.int64)
 
     ordered_labels = labels[ordered] if ordered.size else np.empty(0, dtype=np.int32)
-    particle_n_hits = np.diff(offsets).astype(np.int32)
-    particle_energy_sum = np.zeros(len(particle_ids), dtype=np.float32)
-    particle_time_min = np.zeros(len(particle_ids), dtype=np.float64)
-    particle_time_max = np.zeros(len(particle_ids), dtype=np.float64)
-    particle_x_min = np.zeros(len(particle_ids), dtype=np.uint16)
-    particle_x_max = np.zeros(len(particle_ids), dtype=np.uint16)
-    particle_y_min = np.zeros(len(particle_ids), dtype=np.uint16)
-    particle_y_max = np.zeros(len(particle_ids), dtype=np.uint16)
-
-    for idx in range(len(particle_ids)):
-        start, end = int(offsets[idx]), int(offsets[idx + 1])
-        member_indices = ordered[start:end]
-        if member_indices.size == 0:
-            continue
-        particle_energy_sum[idx] = float(np.sum(arrays.energy[member_indices]))
-        particle_time_min[idx] = float(np.min(arrays.time[member_indices]))
-        particle_time_max[idx] = float(np.max(arrays.time[member_indices]))
-        particle_x_min[idx] = int(np.min(arrays.x[member_indices]))
-        particle_x_max[idx] = int(np.max(arrays.x[member_indices]))
-        particle_y_min[idx] = int(np.min(arrays.y[member_indices]))
-        particle_y_max[idx] = int(np.max(arrays.y[member_indices]))
+    if ordered_particles.size:
+        starts = particle_starts.astype(np.int64, copy=False)
+        particle_energy_sum = np.add.reduceat(arrays.energy[ordered_particles], starts).astype(np.float32, copy=False)
+        particle_time_min = np.minimum.reduceat(arrays.time[ordered_particles], starts).astype(np.float64, copy=False)
+        particle_time_max = np.maximum.reduceat(arrays.time[ordered_particles], starts).astype(np.float64, copy=False)
+        particle_x_min = np.minimum.reduceat(arrays.x[ordered_particles], starts).astype(np.uint16, copy=False)
+        particle_x_max = np.maximum.reduceat(arrays.x[ordered_particles], starts).astype(np.uint16, copy=False)
+        particle_y_min = np.minimum.reduceat(arrays.y[ordered_particles], starts).astype(np.uint16, copy=False)
+        particle_y_max = np.maximum.reduceat(arrays.y[ordered_particles], starts).astype(np.uint16, copy=False)
+    else:
+        particle_energy_sum = np.zeros(0, dtype=np.float32)
+        particle_time_min = np.zeros(0, dtype=np.float64)
+        particle_time_max = np.zeros(0, dtype=np.float64)
+        particle_x_min = np.zeros(0, dtype=np.uint16)
+        particle_x_max = np.zeros(0, dtype=np.uint16)
+        particle_y_min = np.zeros(0, dtype=np.uint16)
+        particle_y_max = np.zeros(0, dtype=np.uint16)
 
     payload = {
         "hit_x": arrays.x[ordered],
@@ -531,6 +605,10 @@ def write_particle_npz(
         "source_path": np.asarray(arrays.source_path.as_posix()),
         "source_start_row": np.asarray(arrays.start_row, dtype=np.int64),
         "source_total_rows": np.asarray(arrays.total_rows if arrays.total_rows is not None else arrays.n_hits, dtype=np.int64),
+        "time_formula": np.asarray("relative(ToA - FToA / 16)"),
+        "time_unit": np.asarray("25 ns ToA ticks"),
+        "time_tick_ns": np.asarray(TOA_TICK_NS, dtype=np.float64),
+        "time_ftoa_subticks_per_toa": np.asarray(FTOA_SUBTICKS_PER_TOA, dtype=np.float64),
         "noise_offset": np.asarray(offsets[-1] if offsets.size else 0, dtype=np.int64),
     }
     tmp_output = output.with_name(f"{output.name}.tmp.npz")
@@ -912,8 +990,19 @@ def build_particle_outputs(
             if skip_existing and output_path.exists():
                 if verbose:
                     print(f"[{file_idx}/{len(files)}] skipping existing {item.relative_path}", flush=True)
-                row["status"] = "skipped_existing"
+                summary = summarize_particle_npz(output_path)
+                row.update(summary)
+                row["source_path"] = item.relative_path
+                row["output_path"] = output_path.as_posix()
+                row["windowed"] = bool(item.rows > params.full_scan_threshold)
+                row["status"] = "ok"
+                row["validation_warnings"] = "reused_existing_shard"
                 row["runtime_s"] = 0.0
+                row["parse_runtime_s"] = 0.0
+                row["cluster_runtime_s"] = 0.0
+                row["write_runtime_s"] = 0.0
+                row["total_runtime_s"] = 0.0
+                row["hits_per_s"] = ""
             else:
                 if verbose:
                     print(f"[{file_idx}/{len(files)}] loading {item.relative_path} ({item.rows:,} rows)", flush=True)
@@ -936,7 +1025,7 @@ def build_particle_outputs(
                 write_started = time.perf_counter()
                 summary = write_particle_npz(arrays, labels, output_path, params=params, compress=compress)
                 write_runtime_s = time.perf_counter() - write_started
-                quality = quality_warnings(arrays, labels, params)
+                quality = quality_warnings(arrays, labels, params, backend=backend)
                 row.update(summary)
                 row["source_path"] = item.relative_path
                 row["output_path"] = output_path.as_posix()
@@ -968,7 +1057,32 @@ def build_particle_outputs(
     }
 
 
-def quality_warnings(arrays: T3PAHitArrays, labels: np.ndarray, params: DBSCANParticleParams) -> list[str]:
+def summarize_particle_npz(path: str | Path) -> dict[str, object]:
+    with np.load(path, allow_pickle=False) as data:
+        particle_count = int(np.asarray(data["particle_id"]).shape[0])
+        row_count = int(np.asarray(data["labels_by_source_row"]).shape[0])
+        if "noise_offset" in data.files:
+            noise_offset = int(np.asarray(data["noise_offset"]))
+            hit_count = int(np.asarray(data["hit_particle_id"]).shape[0])
+            noise_count = max(0, hit_count - noise_offset)
+        else:
+            hit_particle_id = np.asarray(data["hit_particle_id"])
+            noise_count = int(np.sum(hit_particle_id == -1))
+    return {
+        "row_count": row_count,
+        "particle_count": particle_count,
+        "noise_count": noise_count,
+        "noise_fraction": float(noise_count / row_count) if row_count else 0.0,
+    }
+
+
+def quality_warnings(
+    arrays: T3PAHitArrays,
+    labels: np.ndarray,
+    params: DBSCANParticleParams,
+    *,
+    backend: str = "ckdtree-neighborhoods",
+) -> list[str]:
     if arrays.n_hits == 0:
         return ["empty_file"]
     noise_fraction = float(np.sum(labels == -1) / arrays.n_hits)
@@ -977,6 +1091,8 @@ def quality_warnings(arrays: T3PAHitArrays, labels: np.ndarray, params: DBSCANPa
         warnings.append(f"high_noise_fraction={noise_fraction:.3f}")
     if noise_fraction < 0.001 and arrays.n_hits >= params.min_samples:
         warnings.append(f"very_low_noise_fraction={noise_fraction:.3f}")
+    if backend in VOXEL_CC_BACKENDS:
+        return warnings
     stats = build_cluster_stats(arrays.xyt_features(params), labels, max_clusters=2_000)
     splits = count_suspicious_splits(stats, params.eps)
     merges = count_suspicious_merges(stats, params.eps)

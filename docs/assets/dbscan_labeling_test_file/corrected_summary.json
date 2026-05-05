@@ -1,0 +1,302 @@
+{
+  "assets": {
+    "old_p1365_strict": "assets/dbscan_labeling_test_file/old_p1365_recolored_by_strict_eps1_ms2.png",
+    "old_p1365_v002": "assets/dbscan_labeling_test_file/old_p1365_recolored_by_v002_candidate.png",
+    "strict_all": "assets/dbscan_labeling_test_file/strict_eps1_ms2_all_labels_3d.png",
+    "strict_largest_energy": "assets/dbscan_labeling_test_file/strict_eps1_ms2_largest_particle_energy_3d.png",
+    "strict_top10": "assets/dbscan_labeling_test_file/strict_eps1_ms2_top10_largest_labels_3d.png",
+    "v002_largest_energy": "assets/dbscan_labeling_test_file/v002_candidate_largest_particle_energy_3d.png",
+    "v002_top10": "assets/dbscan_labeling_test_file/v002_candidate_top10_largest_labels_3d.png"
+  },
+  "old_largest_split_by_strict": {
+    "n_labels": 18,
+    "noise_hits": 29,
+    "top": [
+      [
+        3177,
+        13
+      ],
+      [
+        3837,
+        9
+      ],
+      [
+        3471,
+        7
+      ],
+      [
+        3541,
+        7
+      ],
+      [
+        3350,
+        6
+      ],
+      [
+        3540,
+        6
+      ],
+      [
+        3577,
+        6
+      ],
+      [
+        3774,
+        6
+      ],
+      [
+        3775,
+        6
+      ],
+      [
+        3176,
+        4
+      ],
+      [
+        3363,
+        4
+      ],
+      [
+        3543,
+        4
+      ],
+      [
+        3608,
+        4
+      ],
+      [
+        3166,
+        3
+      ],
+      [
+        3178,
+        3
+      ],
+      [
+        3542,
+        3
+      ],
+      [
+        3154,
+        2
+      ],
+      [
+        3165,
+        2
+      ]
+    ]
+  },
+  "old_largest_split_by_v002": {
+    "n_labels": 13,
+    "noise_hits": 8,
+    "top": [
+      [
+        2593,
+        22
+      ],
+      [
+        2877,
+        21
+      ],
+      [
+        3096,
+        11
+      ],
+      [
+        2734,
+        9
+      ],
+      [
+        3052,
+        8
+      ],
+      [
+        2585,
+        7
+      ],
+      [
+        2818,
+        7
+      ],
+      [
+        2903,
+        7
+      ],
+      [
+        3054,
+        7
+      ],
+      [
+        2592,
+        5
+      ],
+      [
+        2742,
+        5
+      ],
+      [
+        2927,
+        4
+      ],
+      [
+        2578,
+        3
+      ]
+    ]
+  },
+  "old_largest_v001_label": 1365,
+  "source_file": "F08/tot_toa__r0000000000.t3pa",
+  "strict_eps1_ms2": {
+    "largest_fraction": 0.0020316756706838437,
+    "largest_hits": 44,
+    "median_hits": 3.0,
+    "noise_fraction": 0.3521725077342199,
+    "noise_hits": 7627,
+    "p95_hits": 7.0,
+    "particles": 4093,
+    "top10": [
+      [
+        2695,
+        44
+      ],
+      [
+        3953,
+        23
+      ],
+      [
+        1517,
+        16
+      ],
+      [
+        3751,
+        16
+      ],
+      [
+        1493,
+        16
+      ],
+      [
+        2810,
+        16
+      ],
+      [
+        2134,
+        15
+      ],
+      [
+        2221,
+        14
+      ],
+      [
+        436,
+        14
+      ],
+      [
+        3430,
+        14
+      ]
+    ]
+  },
+  "v001": {
+    "largest_fraction": 0.005725631435563559,
+    "largest_hits": 124,
+    "median_hits": 7.0,
+    "noise_fraction": 0.01934709331855751,
+    "noise_hits": 419,
+    "p95_hits": 32.0,
+    "particles": 1872,
+    "top10": [
+      [
+        1365,
+        124
+      ],
+      [
+        671,
+        120
+      ],
+      [
+        332,
+        119
+      ],
+      [
+        1271,
+        113
+      ],
+      [
+        1508,
+        91
+      ],
+      [
+        44,
+        89
+      ],
+      [
+        989,
+        79
+      ],
+      [
+        1380,
+        76
+      ],
+      [
+        956,
+        76
+      ],
+      [
+        1136,
+        72
+      ]
+    ]
+  },
+  "v002_candidate": {
+    "largest_fraction": 0.0028628157177817797,
+    "largest_hits": 62,
+    "median_hits": 5.0,
+    "noise_fraction": 0.08362192362746457,
+    "noise_hits": 1811,
+    "p95_hits": 12.0,
+    "particles": 3300,
+    "top10": [
+      [
+        2200,
+        62
+      ],
+      [
+        3191,
+        31
+      ],
+      [
+        3034,
+        28
+      ],
+      [
+        2886,
+        28
+      ],
+      [
+        2163,
+        26
+      ],
+      [
+        1766,
+        23
+      ],
+      [
+        1283,
+        22
+      ],
+      [
+        2593,
+        22
+      ],
+      [
+        2877,
+        21
+      ],
+      [
+        1769,
+        20
+      ]
+    ]
+  }
+}
