@@ -26,6 +26,7 @@ dev = ["pytest>=7.0"]
 
 [project.scripts]
 particle-extract-raw = "particle_classification.commands.data:extract_raw_main"
+particle-fetch-raw = "particle_classification.data.fetch:main"
 particle-raw-archive = "particle_classification.data.archive:main"
 particle-data-index = "particle_classification.commands.data:data_index_main"
 particle-build-candidates = "particle_classification.commands.data:build_candidates_main"

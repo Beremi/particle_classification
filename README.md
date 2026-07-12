@@ -23,8 +23,12 @@ reproducibility, but they are not the production path.
 - Large raw data, derived shards, caches, checkpoints, and releases stay under
   gitignored `local_data/`; Git contains parsers, a small matrix example, and a
   snapshot of the indexed original corpus.
-- `particle-raw-archive` provides deterministic `tar.xz` packing, checksums,
-  verification, and safe extraction for publishing source data outside Git.
+- The repository layout before this cleanup remains browsable at the
+  [`precleanup` tag](https://github.com/Beremi/particle_classification/tree/precleanup).
+- `particle-fetch-raw` downloads the pinned public data release, verifies its
+  SHA-256 and internal manifest, and restores the expected `local_data/raw`
+  layout. `particle-raw-archive` provides the underlying deterministic pack,
+  verify, and safe-unpack workflow.
 - Autoencoder code is explicitly experimental. The practical reference is a
   centered `8 x 32 x 32` voxel model with an 8D latent; a pose-separated path
   model is the research direction for explicit XY invariance.
@@ -73,8 +77,34 @@ and plotting scripts rather than only the maintained data/DBSCAN path.
 
 ## Quick start: raw T3PA to particle shards
 
-Place the supplied source ZIP at `raw_data.zip`, then extract it into the
-ignored working area:
+After installing the project, download and verify the published
+[raw-data v1 release](https://github.com/Beremi/particle_classification/releases/tag/raw-data-v1):
+
+```bash
+particle-fetch-raw
+```
+
+On a clean checkout this creates the gitignored working layout:
+
+```text
+local_data/
+├── raw/              original 711-file T3PA corpus used by current scripts
+├── alpha/t3pa/       eight newer alpha T3PA acquisitions
+├── alpha/clog/       newer frame-mode alpha CLOG acquisitions
+├── metadata/         delivered calibration/configuration/readme files
+├── MANIFEST.json
+├── SHA256SUMS
+└── SOURCE_LAYOUT.json
+```
+
+The command downloads the
+[release archive](https://github.com/Beremi/particle_classification/releases/download/raw-data-v1/particle-raw-v1.tar.xz),
+currently 335,294,368 bytes, checks its SHA-256 against the value pinned in
+this package, verifies every payload hash, and only then creates `local_data`.
+It refuses an existing `local_data` tree so local experiments cannot be
+overwritten accidentally.
+
+To use the original supplied ZIP instead, place it at `raw_data.zip` and run:
 
 ```bash
 particle-extract-raw raw_data.zip --dest local_data/raw
@@ -99,38 +129,45 @@ output arrays, and validation requirements.
 
 ## Pack and restore raw data
 
-The publishing workflow stores an extracted tree as a deterministic `tar.xz`
-with `MANIFEST.json` and `SHA256SUMS`. It verifies every payload hash and rejects
-links, special files, and unsafe archive members.
+The release-to-analysis path is deliberately explicit:
+
+```text
+GitHub Release -> pinned HTTPS download -> archive SHA-256 + manifest check
+               -> safe unpack -> local_data/raw -> DBSCAN particle building
+```
+
+For a manual download with GitHub CLI, fetch both release assets, check the
+external checksum, verify the internal manifest, and unpack into the repository
+root:
+
+```bash
+gh release download raw-data-v1 \
+  --repo Beremi/particle_classification \
+  --pattern 'particle-raw-v1.tar.xz*'
+sha256sum --check particle-raw-v1.tar.xz.sha256
+particle-raw-archive verify particle-raw-v1.tar.xz
+particle-raw-archive unpack particle-raw-v1.tar.xz .
+particle-raw-archive verify-tree local_data
+```
+
+Both unpacking paths refuse an existing `local_data` root unless overwrite is
+explicit. `--overwrite` replaces that entire tree, including derived work, so
+it should normally be used only in an empty checkout.
+
+The publishing workflow stores the deduplicated extracted tree as deterministic
+`tar.xz` with `MANIFEST.json` and `SHA256SUMS`. It verifies every payload hash
+and rejects links, special files, and unsafe archive members.
 
 On the 1.58 GB deduplicated combined corpus, XZ preset 6 produced a 335.45 MB
 archive using about 97 MiB pack memory. The literal-smallest 7z result was only
 4.92 MB smaller while using about 2.64 GiB, so preset 6 remains the documented
 default; see the [full comparison](docs/raw-data.md#measured-lossless-compression).
 
-```bash
-mkdir -p local_data/releases
-particle-raw-archive pack \
-  local_data/raw \
-  local_data/releases/particle-raw-t3pa-v1.tar.xz \
-  --root raw \
-  --preset 6
-particle-raw-archive verify \
-  local_data/releases/particle-raw-t3pa-v1.tar.xz
-```
-
-Restore to a new location and verify the extracted tree:
-
-```bash
-particle-raw-archive unpack \
-  local_data/releases/particle-raw-t3pa-v1.tar.xz \
-  local_data/restored
-particle-raw-archive verify-tree local_data/restored/raw
-```
-
-Use a deduplicated extracted tree for a combined public release; do not wrap
-the duplicate source ZIPs inside another archive. The [raw-data guide](docs/raw-data.md)
-documents the known collections, formats, provenance gaps, and release layout.
+Maintainers reproduce the combined source tree with
+`scripts/data/stage_raw_release.py`, then pack it with archive root
+`local_data`; the exact commands and source mapping are in the
+[raw-data guide](docs/raw-data.md#published-release-and-reproduction). Do not
+wrap the duplicate source ZIPs inside another archive.
 
 ## Documentation
 
@@ -146,6 +183,9 @@ documents the known collections, formats, provenance gaps, and release layout.
 
 ## Scientific limitations
 
+- The repository and delivered data currently have no explicit license file.
+  Public download availability does not by itself grant reuse rights; a data
+  license and citation should be added once the owner confirms them.
 - DBSCAN produces candidate partitions, not human-verified particles or
   particle-species labels. Close events can merge and tracks can split.
 - `ToT` is currently transformed into a feature proxy, not a calibrated energy.

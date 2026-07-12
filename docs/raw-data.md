@@ -222,62 +222,106 @@ in this measurement, but its archive was 39,838,591 bytes larger than XZ preset
 6; lower Zstandard levels remain useful when packaging speed matters more than
 release size.
 
-## Extraction and publishing archives
+## Published release and reproduction
 
-The original ZIP extractor can populate the working location:
+The deduplicated corpus is published with the repository as
+[raw-data v1](https://github.com/Beremi/particle_classification/releases/tag/raw-data-v1).
+On a clean checkout, the supported installation path is:
+
+```bash
+particle-fetch-raw
+```
+
+`particle-fetch-raw` downloads
+[`particle-raw-v1.tar.xz`](https://github.com/Beremi/particle_classification/releases/download/raw-data-v1/particle-raw-v1.tar.xz),
+requires the archive to match the SHA-256 pinned in the installed code, checks
+the self-verifying archive, and safely restores this layout:
+
+```text
+local_data/
+├── raw/              # original corpus once; current script default
+├── alpha/
+│   ├── t3pa/         # extracted new alpha T3PA payload
+│   └── clog/         # extracted new alpha CLOG payload
+├── metadata/         # all 26 supplied non-ZIP ancillary files
+├── MANIFEST.json     # generated payload inventory
+├── SHA256SUMS        # generated per-file hashes
+└── SOURCE_LAYOUT.json
+```
+
+The archive contains 5,169 measurement/metadata payload files totaling
+1,577,930,849 bytes before the small generated inventories. Its
+`SOURCE_LAYOUT.json` records component byte counts, component tree digests,
+both alpha source-ZIP hashes, and the six excluded ZIP paths. The two alpha
+ZIPs are represented by their extracted payloads; the four other ZIPs duplicate
+data already under `raw/`.
+
+The published archive is 335,294,368 bytes. Its SHA-256 is
+`6d1696e77b3d925367239bef11d7ce1929d169a85676d3700606e0d39eeb1831`;
+the same value is available as the release asset
+[`particle-raw-v1.tar.xz.sha256`](https://github.com/Beremi/particle_classification/releases/download/raw-data-v1/particle-raw-v1.tar.xz.sha256).
+
+For a manual installation, download both assets and run every verification
+step explicitly:
+
+```bash
+gh release download raw-data-v1 \
+  --repo Beremi/particle_classification \
+  --pattern 'particle-raw-v1.tar.xz*'
+sha256sum --check particle-raw-v1.tar.xz.sha256
+particle-raw-archive verify particle-raw-v1.tar.xz
+particle-raw-archive unpack particle-raw-v1.tar.xz .
+particle-raw-archive verify-tree local_data
+```
+
+Both paths refuse to replace an existing `local_data` tree by default.
+`--overwrite` replaces that entire root, including derived experiments, and is
+therefore intended only for a disposable or empty checkout.
+
+### Maintainer reproduction trace
+
+The exact release flow is source delivery → safe/deduplicated staging →
+deterministic pack → verification → GitHub Release:
+
+```bash
+IMPORTS='local_data/imports/raw data ruzna for skuta 2026'
+ALPHA="$IMPORTS/TPX3 alpha zaric mereni na stole PIXET 17feb2026"
+
+.venv/bin/python scripts/data/stage_raw_release.py \
+  /tmp/particle-raw-v1-stage \
+  --original-raw local_data/raw \
+  --imports-root "$IMPORTS" \
+  --alpha-t3pa-zip "$ALPHA/01 data s pixetem zaric.zip" \
+  --alpha-clog-zip "$ALPHA/03 clog 1ms config z aug2025 zaric.zip"
+
+particle-raw-archive pack \
+  /tmp/particle-raw-v1-stage \
+  /tmp/particle-raw-v1.tar.xz \
+  --root local_data \
+  --preset 6
+particle-raw-archive verify /tmp/particle-raw-v1.tar.xz
+(cd /tmp && sha256sum particle-raw-v1.tar.xz \
+  > particle-raw-v1.tar.xz.sha256)
+```
+
+The stager and packer reject links, special files, unsafe archive members, and
+existing output trees unless overwrite is explicit. For `raw-data-v1`, the
+stager also requires exact checked-in component counts, byte totals, tree
+digests, both alpha source-ZIP hashes, and the six excluded ZIP paths. The
+escape hatch `--allow-unrecognized-delivery` is for synthetic tests or a future
+named release and must not be used to rebuild v1. The packer preserves every
+regular payload byte, sorts members, normalizes archive metadata, adds
+`MANIFEST.json` and `SHA256SUMS`, and verifies the completed output. Identical
+input bytes, root name, preset, Python/liblzma, and code version produce the
+same archive.
+
+The original source ZIP can still populate only the historical working corpus:
 
 ```bash
 particle-extract-raw raw_data.zip --dest local_data/raw
 ```
 
-The extractor preflights member paths/types, extracts through a temporary
-directory, and refuses an existing destination unless `--overwrite` is
-explicit. The index can then be regenerated with `particle-data-index`; avoid
-overwriting the tracked snapshot unless the corpus change is intentional and
-reviewed.
-
-For a new public release, pack an extracted directory into a deterministic,
-self-verifying `tar.xz` archive:
-
-```bash
-particle-raw-archive pack \
-  local_data/raw \
-  particle-raw-t3pa-v1.tar.xz \
-  --root raw \
-  --preset 6
-
-particle-raw-archive verify particle-raw-t3pa-v1.tar.xz
-```
-
-The packer preserves every regular file byte-for-byte, rejects links and
-special files, sorts members, normalizes archive metadata, and adds
-`MANIFEST.json` plus `SHA256SUMS`. It verifies the finished archive before
-publishing it. With identical input bytes, root name, preset, Python/liblzma,
-and code version, the output is reproducible.
-
-Restore and verify it with:
-
-```bash
-particle-raw-archive unpack particle-raw-t3pa-v1.tar.xz local_data
-particle-raw-archive verify-tree local_data/raw
-```
-
-Unpack verifies all payload hashes before creating the final tree, rejects
-unsafe tar members, and refuses to replace an existing root unless
-`--overwrite` is explicit.
-
-For a combined release, first stage a **deduplicated, extracted** source tree:
-
-```text
-particle-raw-v1/
-├── original/        # local_data/raw, once
-├── alpha/
-│   ├── t3pa/        # extracted new alpha T3PA ZIP
-│   └── clog/        # extracted new alpha CLOG ZIP
-├── metadata/        # supplied non-ZIP calibration/config/readme tree
-└── PROVENANCE.md    # scientific run mapping, license, citation, exclusions
-```
-
-Do not include the four duplicate T3PA ZIPs or nest already compressed ZIPs in
-the release archive. The generated manifest proves file identity, but it does
-not replace the still-missing scientific provenance listed above.
+That extractor likewise preflights paths and member types and extracts through
+a temporary directory. The generated hashes prove file identity, but they do
+not replace the incomplete scientific provenance and unspecified data license
+described above.
