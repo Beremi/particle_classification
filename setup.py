@@ -12,16 +12,18 @@ def native_extensions() -> list[Extension]:
     except Exception:
         return []
 
-    compile_args = ["-O3"]
+    compile_args = ["/O2"] if sys.platform == "win32" else ["-O3"]
     link_args: list[str] = []
-    if os.environ.get("PARTICLE_DISABLE_OPENMP") != "1" and sys.platform != "darwin":
+    if os.environ.get("PARTICLE_DISABLE_OPENMP") != "1" and sys.platform == "win32":
+        compile_args.append("/openmp")
+    elif os.environ.get("PARTICLE_DISABLE_OPENMP") != "1" and sys.platform != "darwin":
         compile_args.append("-fopenmp")
         link_args.append("-fopenmp")
 
     return [
         Extension(
             "particle_classification._native_clustering",
-            ["src/particle_classification/native_clustering.c"],
+            ["src/particle_classification/dbscan/native_clustering.c"],
             include_dirs=[np.get_include()],
             extra_compile_args=compile_args,
             extra_link_args=link_args,

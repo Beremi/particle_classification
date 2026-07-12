@@ -6,7 +6,7 @@ Generated from the gitignored raw data archive/extraction. Large `.t3pa` files a
 
 - Files: 1,422
 - Total bytes: 1,426,791,071 (1.3 GB)
-- Total `.t3pa` hit rows: 44,725,206
+- Total `.t3pa` rows: 44,725,206 (44,725,131 physics-hit rows plus 75 data-loss markers)
 - Extensions: `.t3pa` 711, `.t3pa.info` 711
 
 ## Folder Summary
@@ -23,6 +23,7 @@ Generated from the gitignored raw data archive/extraction. Large `.t3pa` files a
 ## Metadata Notes
 
 - `.t3pa` files are tab-separated hit tables with `Index`, `Matrix Index`, `ToA`, `ToT`, `FToA`, and `Overflow` columns.
+- `Overflow = 1` records at matrix indices 116/117 mark the start/end of lost data and are not physics hits; this corpus contains 75 such records.
 - `Matrix Index` is decoded as row-major `x = index % 256`, `y = index // 256`.
 - `.t3pa.info` sidecars contain acquisition metadata such as chipboard ID, high voltage, acquisition duration, threshold, Pixet version, and start time.
 - The first energy-like feature for NN experiments is `log1p(ToT)` until calibrated energy documentation is added.

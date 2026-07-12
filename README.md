@@ -1,91 +1,87 @@
-# Particle Classification from Sparse Timepix Detector Hits
+# Particle classification from sparse Timepix hits
 
-This repository is now a runnable implementation and testing ground for Timepix particle-candidate extraction and classification. The Phase 1 particle-separation baseline is a custom native 3D DBSCAN implementation, while neural-network separator attempts are archived as research notes for later learned alternatives. The central design rule for downstream classification remains **XY invariance**: detector-plane rotation is computed and stored as metadata, but it is not allowed to define a particle morphology class.
-
-## Current Status
-
-- Raw data archive extracted locally to gitignored `local_data/raw/`
-- Raw data index tracked in [`docs/raw-data-index.md`](docs/raw-data-index.md) and [`data/raw_data_index.csv`](data/raw_data_index.csv)
-- Primary package: [`src/particle_classification`](src/particle_classification)
-- Legacy visualization package kept importable as [`src/particle_viz`](src/particle_viz)
-- Updated English report: [`particle_nn_report_updated/particle_nn_report.tex`](particle_nn_report_updated/particle_nn_report.tex)
-- First NN baseline: compact PointNet/DeepSets-style `XYInvariantParticleNet`
-- Final Phase 1 separator baseline: custom C/OpenMP `native-grid-dbscan` with corrected fine time and `configs/teachers/dbscan_phase1_native_eps5_v001.json`, documented in [`docs/phase1-native-grid-baseline.md`](docs/phase1-native-grid-baseline.md)
-- Important DBSCAN audit: old `dbscan_v001` labels match the native backend exactly, but are not trusted particle labels because quality checks found file-scale merged components; see [`docs/dbscan-teacher-audit.md`](docs/dbscan-teacher-audit.md)
-- 3D clustering speed report: [`docs/clustering-speed-report.md`](docs/clustering-speed-report.md)
-- Phase 2 particle embedding/clustering report: [`docs/phase2-particle-embedding-report.md`](docs/phase2-particle-embedding-report.md)
-- Archived Phase 1 NN reports: [`docs/phase1-nn-full-report.md`](docs/phase1-nn-full-report.md), [`docs/phase1-hardening-v001-results.md`](docs/phase1-hardening-v001-results.md), and [`docs/phase1-dbscan-replacement-report.md`](docs/phase1-dbscan-replacement-report.md)
-
-## Design Contract
-
-Candidate particles are represented as variable-size point sets:
+Research code for turning Timepix T3PA hit streams into candidate particles
+and exploring compact, XY-invariant morphology representations. The maintained
+pipeline is:
 
 ```text
-P = {(x_i, y_i, t_i, e_i)}
+T3PA tables + sidecars -> validated hit arrays -> native grid DBSCAN
+                       -> particle NPZ shards -> exploratory autoencoders
 ```
 
-The class embedding uses shape, energy density, scale, time pitch, and energy. The detector-plane azimuth `theta_xy` and its reliability `q_theta` are saved separately.
+This is a research testbed, not a validated particle-species classifier. The
+active Phase 1 separator is the custom C/OpenMP `native-grid-dbscan` backend.
+Neural separator attempts and detailed experiment reports are retained for
+reproducibility, but they are not the production path.
 
-Do not cluster or classify on a descriptor that includes `theta_xy`.
+## Current status
 
-## Repository Layout
+- The canonical DBSCAN configuration is frozen in
+  [`dbscan_phase1_native_eps5_v001.json`](configs/teachers/dbscan_phase1_native_eps5_v001.json):
+  `eps=5`, `min_samples=2`, `time_scale=0.625`, 250,000-hit windows, and
+  25,000-hit overlap.
+- Large raw data, derived shards, caches, checkpoints, and releases stay under
+  gitignored `local_data/`; Git contains parsers, a small matrix example, and a
+  snapshot of the indexed original corpus.
+- `particle-raw-archive` provides deterministic `tar.xz` packing, checksums,
+  verification, and safe extraction for publishing source data outside Git.
+- Autoencoder code is explicitly experimental. The practical reference is a
+  centered `8 x 32 x 32` voxel model with an 8D latent; a pose-separated path
+  model is the research direction for explicit XY invariance.
+
+## Repository map
 
 ```text
-.
-├── configs/
-│   ├── baseline.yaml
-│   └── teachers/
-├── data/
-│   ├── matrix_dump_0001.txt
-│   └── raw_data_index.csv
-├── docs/
-│   ├── raw-data-index.md
-│   └── ...
-├── particle_nn_report_updated/
-├── src/
-│   ├── particle_classification/
-│   └── particle_viz/
-└── tests/
+configs/                         frozen and historical experiment parameters
+data/                            tracked small example and raw-data index CSV
+docs/                            compact current documentation
+experimental_notes/              archived reports, figures, and background
+notebooks/                       interactive demonstrations
+scripts/
+  data/                          raw-data and archive utilities
+  dbscan/                        Phase 1 diagnostics and visualizations
+  autoencoders/                  Phase 2 research workflows
+  legacy/                        archived neural-separator report generators
+src/particle_classification/
+  data/                          T3PA parsing, metadata, indexing, archives
+  dbscan/                        maintained custom DBSCAN implementation
+  experiments/baseline/         small XY-invariant PointNet/DeepSets baseline
+  experiments/autoencoders/      point, path, and voxel models
+  experiments/neural_separator/  non-production learned separator research
+  commands/                      installed command-line entry points
+tests/                           parser, clustering, archive, and workflow tests
+local_data/                      untracked inputs and generated artifacts
 ```
 
-Large local data and generated experiment outputs live under `local_data/` and are ignored by git.
+## Install and check
 
-## Commands
-
-Install in editable mode:
+Python 3.11 or newer, a C compiler, and NumPy headers are required. An editable
+install builds the native extension; Linux enables OpenMP by default.
 
 ```bash
-python -m pip install -e .
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+pytest -q
 ```
 
-Extract raw data:
+Set `PARTICLE_DISABLE_OPENMP=1` during installation for a serial native build.
+Optional dependency groups are `clustering`, `phase2`, `viz`, `parquet`, and
+`speed`. Install `.[dev,phase2,viz]` when working with the archived analysis
+and plotting scripts rather than only the maintained data/DBSCAN path.
+
+## Quick start: raw T3PA to particle shards
+
+Place the supplied source ZIP at `raw_data.zip`, then extract it into the
+ignored working area:
 
 ```bash
 particle-extract-raw raw_data.zip --dest local_data/raw
 ```
 
-Regenerate the raw data index:
-
-```bash
-particle-data-index --input local_data/raw --markdown docs/raw-data-index.md --csv data/raw_data_index.csv
-```
-
-Build a lightweight raw candidate/source table:
-
-```bash
-particle-build-candidates --input local_data/raw --out local_data/processed/candidates.parquet
-```
-
-Tune 3D DBSCAN on a fixed stratified sample:
-
-```bash
-particle-tune-dbscan \
-  --input local_data/raw \
-  --index data/raw_data_index.csv \
-  --out local_data/processed/dbscan_tuning_v001
-```
-
-Build per-file particle NPZ shards with the active Phase 1 baseline:
+Build one compressed particle shard per indexed T3PA table with the active
+separator:
 
 ```bash
 particle-build-particles \
@@ -94,188 +90,73 @@ particle-build-particles \
   --params configs/teachers/dbscan_phase1_native_eps5_v001.json \
   --out local_data/processed/particles_aligned_time_eps5_v001 \
   --backend native-grid-dbscan \
-  --threads 32
+  --threads 0
 ```
 
-Benchmark exact and experimental 3D clustering backends:
+`--threads 0` lets the backend choose its default. See the
+[DBSCAN guide](docs/dbscan.md) for timing coordinates, window reconciliation,
+output arrays, and validation requirements.
+
+## Pack and restore raw data
+
+The publishing workflow stores an extracted tree as a deterministic `tar.xz`
+with `MANIFEST.json` and `SHA256SUMS`. It verifies every payload hash and rejects
+links, special files, and unsafe archive members.
+
+On the 1.58 GB deduplicated combined corpus, XZ preset 6 produced a 335.45 MB
+archive using about 97 MiB pack memory. The literal-smallest 7z result was only
+4.92 MB smaller while using about 2.64 GiB, so preset 6 remains the documented
+default; see the [full comparison](docs/raw-data.md#measured-lossless-compression).
 
 ```bash
-particle-benchmark-clustering \
-  --input local_data/raw \
-  --params configs/teachers/dbscan_phase1_native_eps5_v001.json \
-  --out local_data/benchmarks/clustering_native_v001 \
-  --cases largest,slowest_per_hit,max_particles \
-  --backend ckdtree-pairs \
-  --backend numba-grid-dbscan \
-  --backend native-grid-dbscan \
-  --backend numba-stream-grid-linker \
-  --backend native-stream-grid-linker \
-  --threads 32 \
-  --repeat-runs 1 \
-  --toa-tick-ns 25
+mkdir -p local_data/releases
+particle-raw-archive pack \
+  local_data/raw \
+  local_data/releases/particle-raw-t3pa-v1.tar.xz \
+  --root raw \
+  --preset 6
+particle-raw-archive verify \
+  local_data/releases/particle-raw-t3pa-v1.tar.xz
 ```
 
-Build the Phase 2 variable-hit particle embedding dataset from native Phase 1 shards:
+Restore to a new location and verify the extracted tree:
 
 ```bash
-particle-build-phase2-dataset \
-  --input local_data/processed/particles_aligned_time_eps5_v001 \
-  --out local_data/processed/phase2_particles_v001 \
-  --params configs/teachers/dbscan_phase1_native_eps5_v001.json \
-  --max-points 512 \
-  --views-per-large-particle 4 \
-  --source-backend native-grid-dbscan \
-  --teacher-name dbscan_phase1_native_eps5_v001
+particle-raw-archive unpack \
+  local_data/releases/particle-raw-t3pa-v1.tar.xz \
+  local_data/restored
+particle-raw-archive verify-tree local_data/restored/raw
 ```
 
-Run the Phase 2 architecture/objective sweep and clustering evaluation:
+Use a deduplicated extracted tree for a combined public release; do not wrap
+the duplicate source ZIPs inside another archive. The [raw-data guide](docs/raw-data.md)
+documents the known collections, formats, provenance gaps, and release layout.
 
-```bash
-particle-train-phase2-sweep \
-  --dataset local_data/processed/phase2_particles_v001 \
-  --out local_data/experiments/phase2_particle_sweep_v001 \
-  --budget overnight \
-  --device cuda
+## Documentation
 
-particle-evaluate-phase2 \
-  --dataset local_data/processed/phase2_particles_v001 \
-  --experiment local_data/experiments/phase2_particle_sweep_v001 \
-  --out local_data/experiments/phase2_particle_sweep_v001/evaluation \
-  --device cuda
+- [Documentation index](docs/README.md)
+- [Raw data, T3PA/CLOG formats, and publishing](docs/raw-data.md)
+- [Tracked raw-data index snapshot](docs/raw-data-index.md)
+- [Native grid DBSCAN](docs/dbscan.md)
+- [Particle autoencoders](docs/autoencoder.md)
+- [Script guide](scripts/README.md)
+- [Experimental archive](experimental_notes/README.md)
+- [Background LaTeX report](experimental_notes/background/particle_nn_report_updated/particle_nn_report.tex)
+- [Demo notebook](notebooks/demo_data.ipynb)
 
-particle-generate-phase2-report \
-  --dataset local_data/processed/phase2_particles_v001 \
-  --experiment local_data/experiments/phase2_particle_sweep_v001 \
-  --evaluation local_data/experiments/phase2_particle_sweep_v001/evaluation \
-  --out docs/phase2-particle-embedding-report.md
-```
+## Scientific limitations
 
-The neural Phase 1 separator attempts are archived for now. The commands below
-remain available for reproducing those experiments, but they are not the active
-Phase 1 baseline.
-
-Build leakage-safe pass-1 EdgeTrackNet pseudo-label windows:
-
-```bash
-particle-build-edge-training-set \
-  --input local_data/processed/particles_dbscan_v001 \
-  --params configs/teachers/dbscan_v001.json \
-  --out local_data/processed/pass1_edge_real_stable_v001 \
-  --max-windows 8000 \
-  --window-size 2048 \
-  --window-overlap 512 \
-  --min-stability-ari 0.75 \
-  --split-strategy group-source \
-  --teacher-name dbscan_v001
-```
-
-Build controlled shifted/mixed windows from real particle templates plus procedural particles:
-
-```bash
-particle-build-edge-mixed-set \
-  --input local_data/processed/particles_dbscan_v001 \
-  --params configs/teachers/dbscan_v001.json \
-  --out local_data/processed/pass1_edge_mixed_hard_v001 \
-  --windows 12000 \
-  --synthetic-fraction 0.50 \
-  --hard-fraction 0.70 \
-  --split-strategy group-source \
-  --teacher-name dbscan_v001
-```
-
-Train the Phase 1 edge model:
-
-```bash
-particle-train-edge-tracknet \
-  --manifest local_data/processed/pass1_edge_real_stable_v001/manifest.csv \
-  --out local_data/experiments/phase1_A_real_stable \
-  --steps 6000 \
-  --min-steps 1500 \
-  --batch-size 4 \
-  --hidden-dim 128 \
-  --edge-hidden-dim 128 \
-  --message-passing-steps 2 \
-  --edge-loss focal \
-  --embedding-loss-weight 0.0 \
-  --device cuda
-```
-
-Evaluate one checkpoint against real and hard-mixed test splits:
-
-```bash
-particle-evaluate-phase1 \
-  --checkpoint local_data/experiments/phase1_A_real_stable/edge_tracknet_tiny.pt \
-  --normalization local_data/processed/pass1_edge_real_stable_v001/normalization.json \
-  --manifest local_data/processed/pass1_edge_real_stable_v001/manifest.csv \
-  --manifest local_data/processed/pass1_edge_mixed_hard_v001/manifest.csv \
-  --out local_data/experiments/phase1_A_real_stable/evaluation \
-  --device cuda
-```
-
-Build and fine-tune a real/hard curriculum from the Stage A checkpoint:
-
-```bash
-particle-build-edge-curriculum-set \
-  --real-manifest local_data/processed/pass1_edge_real_stable_v001/manifest.csv \
-  --mixed-manifest local_data/processed/pass1_edge_mixed_hard_v001/manifest.csv \
-  --normalization local_data/processed/pass1_edge_real_stable_v001/normalization.json \
-  --out local_data/processed/pass1_edge_curriculum_v001 \
-  --train-real-ratio 0.50 \
-  --val-real-ratio 0.50 \
-  --test-real-ratio 0.50
-
-particle-train-edge-tracknet \
-  --manifest local_data/processed/pass1_edge_curriculum_v001/manifest.csv \
-  --out local_data/experiments/phase1_C_curriculum_finetune \
-  --init-checkpoint local_data/experiments/phase1_A_real_stable/edge_tracknet_tiny.pt \
-  --steps 10000 \
-  --min-steps 3000 \
-  --batch-size 4 \
-  --learning-rate 0.0002 \
-  --hidden-dim 128 \
-  --edge-hidden-dim 128 \
-  --message-passing-steps 2 \
-  --edge-loss focal \
-  --embedding-loss-weight 0.03 \
-  --device cuda
-```
-
-Run the preliminary DBSCAN-replacement experiment:
-
-```bash
-particle-run-edge-experiment \
-  --particles local_data/processed/particles \
-  --params local_data/processed/dbscan_tuning/best_params.json \
-  --dataset-out local_data/processed/pass1_edge_dataset \
-  --experiment-out local_data/experiments/edge_tracknet_long
-```
-
-Run the longer target-seeking EdgeTrackNet replacement search with plateau LR and validation threshold sweep:
-
-```bash
-particle-run-edge-replacement-search \
-  --particles local_data/processed/particles \
-  --params local_data/processed/dbscan_tuning/best_params.json \
-  --dataset-out local_data/processed/pass1_edge_mixed_dataset \
-  --experiment-out local_data/experiments/edge_tracknet_replacement_search \
-  --windows 4000 \
-  --steps 5000 \
-  --min-steps 1000 \
-  --message-passing-steps 2
-```
-
-Future hand-corrected validation labels should follow [`docs/human-gold-schema.md`](docs/human-gold-schema.md). The evaluator keeps `teacher_dbscan`, `synthetic_truth`, and `human_gold` metrics separated.
-
-Run the minimal XY-invariance training smoke test:
-
-```bash
-particle-train-baseline --config configs/baseline.yaml
-```
-
-## Modeling Roadmap
-
-1. Deterministic XY-invariant descriptors from weighted PCA and energy-density profiles.
-2. `native-grid-dbscan` as the active real-time Phase 1 particle separator.
-3. Phase 2 particle-level embedding on native-generated shards using variable-hit point encoders and descriptor summaries.
-4. Unsupervised family discovery with HDBSCAN/k-means/GMM/DEC/VaDE, with cluster IDs named only after inspection or external truth.
-5. Supervised imitators of frozen discovered families for deployment once a useful family map is selected.
+- DBSCAN produces candidate partitions, not human-verified particles or
+  particle-species labels. Close events can merge and tracks can split.
+- `ToT` is currently transformed into a feature proxy, not a calibrated energy.
+  Detector/run calibration bindings and parts of the acquisition provenance
+  are incomplete, especially for the newer E03 alpha data.
+- Nonzero T3PA overflow records are filtered from particle building, but the
+  corresponding lost intervals cannot be reconstructed.
+- CLOG is frame-integrated data without hit-level arrival times and is not
+  compatible with the T3PA/DBSCAN pipeline.
+- Centered voxel inputs are not inherently rotation invariant. Detector-plane
+  angle must remain metadata rather than a particle-class feature; the
+  pose-separated path approach is still experimental.
+- Autoencoder neighborhoods and unsupervised clusters do not establish physical
+  classes without independent labels and external experimental ground truth.

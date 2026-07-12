@@ -1,0 +1,23 @@
+{
+  "clustered_hits": 2311314,
+  "hits": 2326137,
+  "log1p_tot_max": 5.327876091003418,
+  "log1p_tot_min": 0.0,
+  "log1p_tot_p50": 2.6390573978424072,
+  "log1p_tot_p90": 4.804020881652832,
+  "log1p_tot_p99": 5.153291702270508,
+  "log_tot_norm_max": 0.7686500527183219,
+  "log_tot_norm_min": 0.0,
+  "log_tot_norm_p50": 0.38073549220576036,
+  "log_tot_norm_p90": 0.6930737337562887,
+  "log_tot_norm_p99": 0.7434628227636725,
+  "noise_fraction": 0.006372367577662021,
+  "noise_hits": 14823,
+  "raw_tot_max": 205.0,
+  "raw_tot_min": 0.0,
+  "raw_tot_p50": 13.0,
+  "raw_tot_p90": 121.0,
+  "raw_tot_p99": 172.0,
+  "shard": "local_data/processed/particles_aligned_time_eps5_v001/F08/tot_toa__r0000000028.particles.npz",
+  "source": "F08/tot_toa__r0000000028.t3pa"
+}

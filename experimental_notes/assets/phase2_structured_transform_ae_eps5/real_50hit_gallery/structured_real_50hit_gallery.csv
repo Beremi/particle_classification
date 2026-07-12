@@ -1,0 +1,11 @@
+rank,cache_index,source_path,particle_id,view_id,source_n_hits,view_n_hits,z8_energy_path_rel_l2,z32_energy_path_rel_l2,image
+1,9894,F08/tot_toa__r0000000028.t3pa,4365,2,1221,512,0.4380795955657959,0.4508526027202606,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_01_p4365.png
+2,20184,F08/tot_toa__r0000000037.t3pa,12128,3,1088,512,0.35526373982429504,0.3607946038246155,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_02_p12128.png
+3,10418,F08/tot_toa__r0000000028.t3pa,40181,1,964,512,0.4956591725349426,0.5062543749809265,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_03_p40181.png
+4,21828,F08/tot_toa__r0000000042.t3pa,29993,0,911,512,0.1446942389011383,0.1418209671974182,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_04_p29993.png
+5,23011,F08/tot_toa__r0000000037.t3pa,6283,1,646,512,0.32339173555374146,0.3278460204601288,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_05_p6283.png
+6,8847,F08/tot_toa__r0000000028.t3pa,66806,0,56,56,0.2339438647031784,0.2314143180847168,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_06_p66806.png
+7,9613,F08/tot_toa__r0000000028.t3pa,46440,0,58,58,0.27574390172958374,0.2772120535373688,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_07_p46440.png
+8,18216,F08/tot_toa__r0000000028.t3pa,79014,0,55,55,0.33700937032699585,0.33676210045814514,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_08_p79014.png
+9,12900,F08/tot_toa__r0000000028.t3pa,33422,0,76,76,0.2803942859172821,0.2767871618270874,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_09_p33422.png
+10,11863,F08/tot_toa__r0000000042.t3pa,21584,0,83,83,0.28003087639808655,0.28001120686531067,docs/assets/phase2_structured_transform_ae_eps5/real_50hit_gallery/structured_real_50hit_10_p21584.png

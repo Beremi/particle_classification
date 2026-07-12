@@ -172,7 +172,7 @@ def _render_markdown(rows: list[IndexedRawFile]) -> str:
         "",
         f"- Files: {len(rows):,}",
         f"- Total bytes: {total_bytes:,} ({_human_bytes(total_bytes)})",
-        f"- Total `.t3pa` hit rows: {total_rows:,}",
+        f"- Total `.t3pa` rows: {total_rows:,}",
         "- Extensions: "
         + ", ".join(f"`{ext}` {count:,}" for ext, count in sorted(ext_counts.items())),
         "",
@@ -211,6 +211,7 @@ def _render_markdown(rows: list[IndexedRawFile]) -> str:
             "## Metadata Notes",
             "",
             "- `.t3pa` files are tab-separated hit tables with `Index`, `Matrix Index`, `ToA`, `ToT`, `FToA`, and `Overflow` columns.",
+            "- Row totals include nonzero-`Overflow` device records; those markers are not detector hits.",
             "- `Matrix Index` is decoded as row-major `x = index % 256`, `y = index // 256`.",
             "- `.t3pa.info` sidecars contain acquisition metadata such as chipboard ID, high voltage, acquisition duration, threshold, Pixet version, and start time.",
             "- The first energy-like feature for NN experiments is `log1p(ToT)` until calibrated energy documentation is added.",

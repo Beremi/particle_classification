@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def test_phase1_full_report_render_separates_models_from_references():
-    module_path = Path("scripts/generate_phase1_nn_full_report.py")
+    module_path = Path("scripts/legacy/generate_phase1_nn_full_report.py")
     spec = importlib.util.spec_from_file_location("phase1_report", module_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

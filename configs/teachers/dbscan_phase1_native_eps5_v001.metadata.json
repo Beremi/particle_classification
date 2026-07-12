@@ -7,7 +7,7 @@
     "This replaces dbscan_v001 for particle-shard generation and Phase 2 training data.",
     "The old dbscan_v001 backend agreement remains useful for implementation validation only, but its parameters are not trusted as physical particle labels.",
     "The eps5 aligned-time pass was reestimated over all 711 local .t3pa files into local_data/processed/particles_aligned_time_eps5_v001/.",
-    "Weighted full-data noise fraction was 0.024 over 44,725,206 hits.",
+    "Historical weighted full-data noise fraction was 0.024 over 44,725,206 table rows; that run predated default filtering of the corpus's 75 data-loss markers.",
     "The densest observed file remained faster than real time: 12.209 s runtime for 15.632 s physical duration, RT fraction 0.781.",
     "The largest file data I05/sync__I05-W0044_r001.t3pa ran in 36.063 s for 59.789 s physical duration, RT fraction 0.603."
   ],

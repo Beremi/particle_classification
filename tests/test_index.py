@@ -23,4 +23,4 @@ def test_index_folder_and_write_outputs(tmp_path):
     write_index_csv(rows, csv_path)
     write_index_markdown(rows, md_path)
     assert "mini.t3pa" in csv_path.read_text(encoding="utf-8")
-    assert "Total `.t3pa` hit rows: 4" in md_path.read_text(encoding="utf-8")
+    assert "Total `.t3pa` rows: 4" in md_path.read_text(encoding="utf-8")

@@ -28,6 +28,29 @@ def test_load_t3pa_hit_arrays_preserves_time_energy_and_provenance():
     assert arrays.source_row.tolist() == [0, 1, 2, 3]
 
 
+def test_load_t3pa_hit_arrays_excludes_device_markers_by_default(tmp_path):
+    source = tmp_path / "markers.t3pa"
+    source.write_text(
+        "Index\tMatrix Index\tToA\tToT\tFToA\tOverflow\n"
+        "0\t256\t1000\t7\t0\t0\n"
+        "1\t116\t0\t0\t0\t1\n"
+        "2\t117\t87\t0\t0\t1\n"
+        "3\t257\t1010\t9\t0\t0\n",
+        encoding="utf-8",
+    )
+
+    hits = load_t3pa_hit_arrays(source)
+    raw_records = load_t3pa_hit_arrays(source, include_special_records=True)
+
+    assert hits.n_hits == 2
+    assert hits.source_row.tolist() == [0, 3]
+    assert hits.time.tolist() == [0.0, 10.0]
+    assert hits.special_records_skipped == 2
+    assert raw_records.n_hits == 4
+    assert raw_records.overflow.tolist() == [0, 1, 1, 0]
+    assert raw_records.special_records_skipped == 0
+
+
 def test_windowed_dbscan_matches_full_dbscan_on_boundary_cluster():
     track_a = np.array([[0, 0, 0], [1, 0, 1], [2, 0, 2], [3, 0, 3], [4, 0, 4]], dtype=float)
     track_b = np.array([[20, 20, 0], [21, 20, 1], [22, 20, 2], [23, 20, 3], [24, 20, 4]], dtype=float)
@@ -62,6 +85,7 @@ def test_write_particle_npz_ragged_offsets_preserve_sequences(tmp_path):
         assert data["hit_particle_id"].tolist() == [0, 0, 1, -1]
         assert data["labels_by_source_row"].tolist() == [0, 0, 1, -1]
         assert str(data["time_formula"]) == "relative(ToA - FToA / 16)"
+        assert int(data["source_special_records_skipped"]) == 0
         assert int(data["noise_offset"]) == 3
 
 

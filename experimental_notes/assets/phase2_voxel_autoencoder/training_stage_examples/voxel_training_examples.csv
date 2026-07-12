@@ -1,0 +1,11 @@
+rank,source_path,particle_id,n_hits,kept_fraction,kept_energy_fraction,clean_nonzero_pixels,corrupted_nonzero_pixels,image
+1,F08/tot_toa__r0000000027.t3pa,4215,153,1.0,1.0,153,824,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_01.png
+2,data I05/sync__I05-W0044_r000.t3pa,383887,53,1.0,1.0,53,411,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_02.png
+3,F08/tot_toa__r0000000045.t3pa,10578,82,1.0,1.0,82,588,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_03.png
+4,F08/tot_toa__r0000000039.t3pa,4749,126,1.0,1.0,126,574,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_04.png
+5,data I05/sync__I05-W0044_r002.t3pa,44761,84,1.0,1.0,84,732,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_05.png
+6,F08/tot_toa__r0000000038.t3pa,39181,76,1.0,1.0,76,505,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_06.png
+7,data I05/sync__I05-W0044_r001.t3pa,534793,151,0.7682119205298014,0.7577160298417309,116,853,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_07.png
+8,F08/tot_toa__r0000000028.t3pa,14764,62,1.0,1.0,62,287,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_08.png
+9,F08/tot_toa__r0000000052.t3pa,9665,84,1.0,1.0,84,372,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_09.png
+10,F08/tot_toa__r0000000028.t3pa,67577,52,1.0,1.0,52,262,docs/assets/phase2_voxel_autoencoder/training_stage_examples/voxel_training_example_10.png

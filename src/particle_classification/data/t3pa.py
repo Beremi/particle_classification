@@ -17,7 +17,9 @@ class T3PAHit:
     """One raw row from a Pixet/Timepix `.t3pa` file.
 
     `Matrix Index` is interpreted as row-major indexing on a 256 x 256 sensor:
-    `x = matrix_index % 256`, `y = matrix_index // 256`.
+    `x = matrix_index % 256`, `y = matrix_index // 256`. A nonzero
+    ``overflow`` denotes a producer special record rather than a detector hit;
+    the iterator preserves those records losslessly.
     """
 
     index: int
@@ -28,6 +30,10 @@ class T3PAHit:
     tot: int
     ftoa: int
     overflow: int
+
+    @property
+    def is_special_record(self) -> bool:
+        return self.overflow != 0
 
 
 def matrix_index_to_xy(matrix_index: int, *, width: int = 256) -> tuple[int, int]:
@@ -116,15 +122,21 @@ def count_t3pa_rows(source: str | Path | BinaryIO) -> int:
     return max(0, line_count - 1)
 
 
-def hits_to_numpy(hits: Iterable[T3PAHit]):
+def hits_to_numpy(hits: Iterable[T3PAHit], *, include_special_records: bool = False):
     """Convert hits to an `[N, 4]` NumPy array with columns `x, y, toa, log1p(tot)`.
 
-    The import is intentionally local so indexing remains lightweight.
+    Nonzero-overflow device records are excluded unless
+    ``include_special_records`` is requested. The import is intentionally local
+    so indexing remains lightweight.
     """
 
     import numpy as np
 
-    rows = [(hit.x, hit.y, hit.toa, np.log1p(max(hit.tot, 0))) for hit in hits]
+    rows = [
+        (hit.x, hit.y, hit.toa, np.log1p(max(hit.tot, 0)))
+        for hit in hits
+        if include_special_records or not hit.is_special_record
+    ]
     if not rows:
         return np.empty((0, 4), dtype=float)
     return np.asarray(rows, dtype=float)

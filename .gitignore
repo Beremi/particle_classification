@@ -8,11 +8,15 @@ __pycache__/
 local_data/
 checkpoints/
 runs/
+outputs/
 wandb/
 mlruns/
 
 # Raw archives are intentionally kept out of git.
 *.zip
+*.tar.xz
+*.tar.zst
+*.7z
 
 # Python packaging/build output
 .venv/

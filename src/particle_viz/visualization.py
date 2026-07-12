@@ -14,7 +14,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     DBSCAN = None
 
-from particle_classification.clustering import dbscan_labels
+from particle_classification.dbscan.reference import dbscan_labels
 
 from .models import DBSCANResult, MatrixRecord
 
